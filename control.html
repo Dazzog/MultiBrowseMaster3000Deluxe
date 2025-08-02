@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    body {
+      margin: 0;
+      padding: 15px;
+      font-family: 'Segoe UI', sans-serif;
+      background: #111;
+      color: #eee;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto;
+      gap: 15px;
+    }
+
+    .cell {
+      background: #1c1c1c;
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 0 5px #000;
+	  
+	  &.full-width {
+		grid-column-start: 1;
+		grid-column-end: 3;
+	  }
+	  
+      label {
+        margin-right: 0.3em;
+      }
+    }
+
+    input, select {
+      flex: 1;
+      padding: 8px 10px;
+	  margin: 0 4px;
+      font-size: 14px;
+      background: #2a2a2a;
+      color: #fff;
+      border: 1px solid #444;
+      border-radius: 4px;
+      outline: none;
+    }
+
+    button {
+		margin: 0 4px;
+		padding: 4px 4px;
+		font-size: 14px;
+		background: #9768D1;
+		color: white;
+		border: none;
+		border-radius: 4px;
+		cursor: pointer;
+		display: flex;
+		justify-content: center;
+		align-content: center;
+    }
+
+    button:hover {
+      background: #7B52AB;
+    }
+
+    button.active {
+      background: #F4511E;
+    }
+
+    button[disabled] {
+      background: #333333;
+      color: #222222;
+      pointer-events: none;
+    }
+	
+	button:not(.active) span:not(:first-child) {
+	  display: none;
+	}
+
+	button.active span:not(:last-child) {
+	  display: none;
+	}
+	
+	span.pre-icon {
+		margin-right: 6px;
+		opacity: 0.5;
+	}
+	
+	.material-symbols-outlined.flip-horizontal {
+		transform: scaleX(-1);
+	}
+  </style>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@400" rel="stylesheet" />
+</head>
+<body>
+  <div class="grid">
+    <div class="cell">
+	  <span class="pre-icon material-symbols-outlined flip-horizontal">
+		position_top_right
+	  </span>
+	  
+	  <button id="backBtn0" disabled="true" onclick="goBack(0)">
+		<span class="material-symbols-outlined">arrow_back</span>
+	  </button>
+      <button id="forwardBtn0" disabled="true" onclick="goForward(0)">
+		<span class="material-symbols-outlined">arrow_forward</span>
+	  </button>
+	  
+      <input id="url0" placeholder="View 1 (oben links)" onkeydown="submitURL(event, 0)">
+
+      <button onclick="navigate(0)">	  
+		<span class="material-symbols-outlined">subdirectory_arrow_right</span>
+	  </button>
+      <button id="fullscreenBtn0" onclick="toggleFullscreen(0)">
+		<span class="material-symbols-outlined">fullscreen</span>
+		<span class="material-symbols-outlined">fullscreen_exit</span>
+	  </button>
+    </div>
+    <div class="cell">
+	  <span class="pre-icon material-symbols-outlined">position_top_right</span>
+	
+	  <button id="backBtn1" disabled="true" onclick="goBack(1)">
+		<span class="material-symbols-outlined">arrow_back</span>
+	  </button>
+      <button id="forwardBtn1" disabled="true" onclick="goForward(1)">	  
+		<span class="material-symbols-outlined">arrow_forward</span>
+	  </button>
+	  
+      <input id="url1" placeholder="View 2 (oben rechts)" onkeydown="submitURL(event, 1)">
+	  
+      <button onclick="navigate(1)">	  
+		<span class="material-symbols-outlined">subdirectory_arrow_right</span>
+	  </button>
+      <button id="fullscreenBtn1" onclick="toggleFullscreen(1)">
+		<span class="material-symbols-outlined">fullscreen</span>
+		<span class="material-symbols-outlined">fullscreen_exit</span>
+	  </button>
+    </div>
+    <div class="cell">
+	  <span class="pre-icon material-symbols-outlined">position_bottom_left</span>
+	  
+	  <button id="backBtn2" disabled="true" onclick="goBack(2)">
+		<span class="material-symbols-outlined">arrow_back</span>
+	  </button>
+      <button id="forwardBtn2" disabled="true" onclick="goForward(2)">	  
+		<span class="material-symbols-outlined">arrow_forward</span>
+	  </button>
+	  
+      <input id="url2" placeholder="View 3 (unten links)" onkeydown="submitURL(event, 2)">
+	  
+      <button onclick="navigate(2)">	  
+		<span class="material-symbols-outlined">subdirectory_arrow_right</span>
+	  </button>
+      <button id="fullscreenBtn2" onclick="toggleFullscreen(2)">
+		<span class="material-symbols-outlined">fullscreen</span>
+		<span class="material-symbols-outlined">fullscreen_exit</span>
+	  </button>
+    </div>
+    <div class="cell">
+	  <span class="pre-icon material-symbols-outlined">position_bottom_right</span>
+	  
+	  <button id="backBtn3" disabled="true" onclick="goBack(3)">
+		<span class="material-symbols-outlined">arrow_back</span>
+	  </button>
+      <button id="forwardBtn3" disabled="true" onclick="goForward(3)">	  
+		<span class="material-symbols-outlined">arrow_forward</span>
+	  </button>
+	  
+      <input id="url3" placeholder="View 4 (unten rechts)" onkeydown="submitURL(event, 3)">
+	  
+      <button onclick="navigate(3)">	  
+		<span class="material-symbols-outlined">subdirectory_arrow_right</span>
+	  </button>
+      <button id="fullscreenBtn3" onclick="toggleFullscreen(3)">
+		<span class="material-symbols-outlined">fullscreen</span>
+		<span class="material-symbols-outlined">fullscreen_exit</span>
+	  </button>
+    </div>
+  
+	<div class="cell full-width">
+		<span class="pre-icon material-symbols-outlined">tv_displays</span>	
+		<label for="displaySelect">Monitor: </label>
+		<select id="displaySelect" onchange="changeDisplay()">
+			<option>Lade Monitore…</option>
+		</select>
+	</div>
+  </div>
+
+  <script>
+    const inputs = [0, 1, 2, 3].map(i => document.getElementById(`url${i}`));
+    const fullscreenBtns = [0, 1, 2, 3].map(i => document.getElementById(`fullscreenBtn${i}`));
+
+    window.api?.requestStoredURLs().then((stored) => {
+      stored.forEach((url, i) => {
+        if (inputs[i]) inputs[i].value = url;
+      });
+    });
+	
+	window.api?.onURLUpdate(({ index, url, canGoBack, canGoForward }) => {
+	  const input = document.getElementById(`url${index}`);
+	  if (input) {
+		input.value = url;
+		saveAllURLs();
+	  }
+	  
+	  const backBtn = document.getElementById(`backBtn${index}`);
+	  const forwardBtn = document.getElementById(`forwardBtn${index}`);
+
+	  if (backBtn) backBtn.disabled = !canGoBack;
+	  if (forwardBtn) forwardBtn.disabled = !canGoForward;
+	});
+
+    function navigate(index) {
+      const input = inputs[index];
+      if (input && input.value) {
+        window.api.navigate(index, input.value);
+        saveAllURLs();
+      }
+    }
+
+    function submitURL(event, index) {
+      if (event.key === 'Enter') {
+        navigate(index);
+      }
+    }
+
+    function toggleFullscreen(index) {
+	  const active = fullscreenBtns[index].classList.contains('active');
+	  document.querySelectorAll('button.active').forEach((btn) => {
+		btn.classList.remove('active');
+	  });
+	  
+	  if (!active) {
+		fullscreenBtns[index].classList.add('active');
+	  }
+	  
+      window.api?.toggleFullscreen(index);
+    }
+	
+	function goBack(index) {
+	  window.api.goBack(index);
+	}
+	
+	function goForward(index) {
+	  window.api.goForward(index);
+	}
+
+    function saveAllURLs() {
+      const urls = inputs.map(input => input.value || '');
+      window.api?.saveURLs(urls);
+    }
+	
+	async function populateDisplayList() {
+		const select = document.getElementById('displaySelect');
+		const displays = await window.api.getDisplays();
+
+		select.innerHTML = ''; // leeren
+		displays.forEach(display => {
+		const { index, bounds } = display;
+		const option = document.createElement('option');
+		option.value = index;
+		option.text = `${index + 1}: ${bounds.width}×${bounds.height}`;
+		select.appendChild(option);
+		});
+	}
+
+	function changeDisplay() {
+		const select = document.getElementById('displaySelect');
+		const index = parseInt(select.value, 10);
+		if (!isNaN(index)) {
+			window.api.moveToDisplay(index);
+		}
+	}
+	
+	populateDisplayList();
+  </script>
+</body>
+</html>
