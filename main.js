@@ -73,10 +73,10 @@ function processInput(input) {
   }
 
   // Erweiterter RegEx für URL-Erkennung inklusive http(s), file, und about:blank
-  const urlPattern = /^(https?:\/\/|file:\/\/\/)([\w-]+\.)*[\w-]{2,}([\/?#][^\s]*)?$/i;
+  const urlPattern = /^(https?:\/\/|file:\/\/)([\w-]+\.)*[\w-]{2,}([\/?#][^\s]*)?$/i;
 
   // Sonderfälle wie file://... (ohne Domain) und about:blank
-  const specialCases = /^(file:\/\/\/[^\s]+|about:blank)$/i;
+  const specialCases = /^(file:\/\/.+|about:blank)$/i;
 
   if (urlPattern.test(input) || specialCases.test(input)) {
     // Ergänze ggf. http:// bei Domain-URLs ohne Protokoll
@@ -274,4 +274,8 @@ ipcMain.on('set-ticker-text', (event, text) => {
 
   tickerText = text;
   layoutAllViews();
+});
+
+ipcMain.on('drop', (event, path) => {
+  event.sender.send('drop-reply', path);
 });

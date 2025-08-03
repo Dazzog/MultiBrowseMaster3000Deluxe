@@ -184,7 +184,7 @@
 	  </button>
 	  
       <input id="url3" placeholder="View 4 (unten rechts)" onkeydown="submitURL(event, 3)">
-	  
+
       <button onclick="navigate(3)">	  
 		<span class="material-symbols-outlined">subdirectory_arrow_right</span>
 	  </button>
@@ -312,6 +312,16 @@
 			setTicker();
 		}
 	}
+
+	window.api?.onDrop(({ path, id }) => {
+		if (id.startsWith('url')) {
+			document.getElementById(id).value = path;
+			const index = +id[3];
+			window.api.navigate(index, path);
+			console.log(path);
+			saveAllURLs();
+		}
+	});
   </script>
 </body>
 </html>
