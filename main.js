@@ -1,4 +1,4 @@
-const { app, BrowserWindow, BrowserView, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, BrowserView, ipcMain, screen, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -67,6 +67,10 @@ function processInput(input) {
     return `https://www.google.com/search?q=${encodedQuery}`;
   }
 }
+
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
 
 app.whenReady().then(() => {
   const { width, height } = screen.getPrimaryDisplay().bounds;
@@ -147,6 +151,19 @@ app.whenReady().then(() => {
 
   controlWindow.on('closed', () => {
     if (displayWindow && !displayWindow.isDestroyed()) displayWindow.close();
+  });
+
+  ipcMain.on('show-context-menu', (event) => {
+    const template = [
+      { role: 'cut', label: 'Ausschneiden' },
+      { role: 'copy', label: 'Kopieren' },
+      { role: 'paste', label: 'Einfügen' },
+      { type: 'separator' },
+      { role: 'selectAll', label: 'Alles auswählen' }
+    ];
+
+    const menu = Menu.buildFromTemplate(template);
+    menu.popup(BrowserWindow.fromWebContents(event.sender));
   });
 });
 
