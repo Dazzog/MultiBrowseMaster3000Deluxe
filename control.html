@@ -217,10 +217,8 @@
 
     function navigate(index) {
       const input = inputs[index];
-      if (input && input.value) {
-        window.api.navigate(index, input.value);
-        saveAllURLs();
-      }
+      window.api.navigate(index, input?.value || '');
+      saveAllURLs();
     }
 
     function submitURL(event, index) {
