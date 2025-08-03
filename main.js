@@ -9,6 +9,9 @@ let controlWindow;
 let views = [];
 let fullscreenIndex = null;
 
+let tickerView = null;
+let tickerText = null;
+
 const dataFile = path.join(app.getPath('userData'), 'urls.json');
 
 function loadStoredURLs() {
@@ -28,15 +31,19 @@ function saveURLs(urlArray) {
 
 function layoutAllViews() {
   const [winWidth, winHeight] = displayWindow.getContentSize();
+
+  const tickerHeight = tickerText ? winHeight * 0.05 : 0;
+  const availableHeight = winHeight - tickerHeight;
+
   const cols = 2, rows = 2;
   const viewWidth = Math.floor(winWidth / cols);
-  const viewHeight = Math.floor(winHeight / rows);
+  const viewHeight = Math.floor(availableHeight / rows);
 
   for (let i = 0; i < views.length; i++) {
     const col = i % cols;
     const row = Math.floor(i / cols);
     const x = col * viewWidth;
-    const y = row * viewHeight;
+    const y = row * (viewHeight + tickerHeight);
 
     views[i].setBounds({
       x,
@@ -46,6 +53,13 @@ function layoutAllViews() {
     });
     views[i].setAutoResize({ width: true, height: true });
   }
+
+  tickerView.setBounds({
+    x: 0,
+    y: viewHeight,
+    width: winWidth,
+    height: tickerHeight,
+  })
 }
 
 function processInput(input) {
@@ -53,9 +67,9 @@ function processInput(input) {
   input = (input || '').trim();
 
 
-  // Gib bei leerem Input sofort about:blank zurück
+  // Gib bei leerem Input sofort Standardseite zurück
   if (!input) {
-    return 'about:blank';
+    return 'https://picsum.photos/1920/1080';
   }
 
   // Erweiterter RegEx für URL-Erkennung inklusive http(s), file, und about:blank
@@ -102,18 +116,10 @@ app.whenReady().then(() => {
 
   for (let i = 0; i < 4; i++) {
     const view = new BrowserView({ webPreferences: { contextIsolation: true } });
+    view.setAutoResize({ width: true, height: true });
+
     views.push(view);
     displayWindow.addBrowserView(view);
-
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    view.setBounds({
-      x: col * Math.floor(width / 2),
-      y: row * Math.floor(height / 2),
-      width: Math.floor(width / 2),
-      height: Math.floor(height / 2)
-    });
-    view.setAutoResize({ width: true, height: true });
 
     const url = storedURLs[i] || 'https://picsum.photos/1920/1080';
     view.webContents.loadURL(url);
@@ -131,6 +137,17 @@ app.whenReady().then(() => {
 	view.webContents.on('did-navigate', () => sendNavUpdate(i));
 	view.webContents.on('did-navigate-in-page', () => sendNavUpdate(i));
   }
+
+  tickerView = new BrowserView({
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+  tickerView.setAutoResize({ width: true, height: true });
+  tickerView.webContents.loadFile('ticker.html');
+  displayWindow.addBrowserView(tickerView);
 
   layoutAllViews();
 
@@ -250,4 +267,11 @@ ipcMain.on('move-to-display', (event, targetIndex) => {
   });
 
   displayWindow.setFullScreen(true);
+});
+
+ipcMain.on('set-ticker-text', (event, text) => {
+  tickerView.webContents.send('update-ticker-text', text);
+
+  tickerText = text;
+  layoutAllViews();
 });

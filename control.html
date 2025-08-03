@@ -23,9 +23,20 @@
       background: #1c1c1c;
       border-radius: 8px;
       padding: 10px;
-      display: flex;
-      align-items: center;
       box-shadow: 0 0 5px #000;
+
+		&, .wrapper {
+			display: flex;
+			align-items: center;
+		}
+
+		.wrapper {
+			flex-grow: 1;
+
+			+ .wrapper {
+				margin-left: 16px;
+			}
+		}
 	  
 	  &.full-width {
 		grid-column-start: 1;
@@ -141,6 +152,7 @@
 		<span class="material-symbols-outlined">fullscreen_exit</span>
 	  </button>
     </div>
+
     <div class="cell">
 	  <span class="pre-icon material-symbols-outlined">position_bottom_left</span>
 	  
@@ -183,17 +195,31 @@
     </div>
   
 	<div class="cell full-width">
-		<span class="pre-icon material-symbols-outlined">tv_displays</span>	
-		<label for="displaySelect">Monitor: </label>
-		<select id="displaySelect" onchange="changeDisplay()">
-			<option>Lade Monitore…</option>
-		</select>
+		<div class="wrapper">
+			<span class="pre-icon material-symbols-outlined">tv_displays</span>
+			<label for="displaySelect">Monitor: </label>
+			<select id="displaySelect" onchange="changeDisplay()">
+				<option>Lade Monitore…</option>
+			</select>
+		</div>
+
+		<div class="wrapper">
+			<span class="pre-icon material-symbols-outlined">
+				abc
+			  </span>
+			<label for="tickerText">Lauftext: </label>
+			<input id="tickerText" placeholder="Kein Lauftext" onkeydown="submitTicker(event)">
+			<button onclick="setTicker()">
+				<span class="material-symbols-outlined">subdirectory_arrow_right</span>
+			</button>
+		</div>
 	</div>
   </div>
 
   <script>
     const inputs = [0, 1, 2, 3].map(i => document.getElementById(`url${i}`));
     const fullscreenBtns = [0, 1, 2, 3].map(i => document.getElementById(`fullscreenBtn${i}`));
+	const tickerInput = document.getElementById(`tickerText`);
 
     window.api?.requestStoredURLs().then((stored) => {
       stored.forEach((url, i) => {
@@ -276,6 +302,16 @@
 	}
 	
 	populateDisplayList();
+
+	function setTicker() {
+		window.api.setTickerText(tickerInput?.value || '');
+	}
+
+	function submitTicker(event) {
+		if (event.key === 'Enter') {
+			setTicker();
+		}
+	}
   </script>
 </body>
 </html>

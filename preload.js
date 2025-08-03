@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('api', {
   onURLUpdate: (callback) => ipcRenderer.on('update-url', (event, data) => callback(data)),
   getDisplays: () => ipcRenderer.invoke('get-displays'),
   moveToDisplay: (index) => ipcRenderer.send('move-to-display', index),
+  setTickerText: (text) => ipcRenderer.send('set-ticker-text', text),
+  onUpdateTickerText: (callback) => ipcRenderer.on('update-ticker-text', (_, text) => callback(text))
 });
 
 window.addEventListener('contextmenu', (event) => {

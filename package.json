@@ -1,6 +1,6 @@
 {
 	"name": "MultiBrowseMaster3000Deluxe",
-	"version": "1.0.69",
+	"version": "1.1.69",
 	"main": "main.js",
 	"scripts": {
 		"start": "electron .",
