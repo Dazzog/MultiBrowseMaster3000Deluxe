@@ -11,3 +11,10 @@ contextBridge.exposeInMainWorld('api', {
   getDisplays: () => ipcRenderer.invoke('get-displays'),
   moveToDisplay: (index) => ipcRenderer.send('move-to-display', index),
 });
+
+window.addEventListener('contextmenu', (event) => {
+  if (event.target.nodeName === 'INPUT' || event.target.nodeName === 'TEXTAREA') {
+    event.preventDefault();
+    ipcRenderer.send('show-context-menu');
+  }
+});
