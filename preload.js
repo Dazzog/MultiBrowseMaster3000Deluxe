@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   navigate: (index, url) => ipcRenderer.send('navigate', { index, url }),
@@ -11,7 +11,8 @@ contextBridge.exposeInMainWorld('api', {
   getDisplays: () => ipcRenderer.invoke('get-displays'),
   moveToDisplay: (index) => ipcRenderer.send('move-to-display', index),
   setTickerText: (text) => ipcRenderer.send('set-ticker-text', text),
-  onUpdateTickerText: (callback) => ipcRenderer.on('update-ticker-text', (_, text) => callback(text))
+  onUpdateTickerText: (callback) => ipcRenderer.on('update-ticker-text', (_, text) => callback(text)),
+  onDrop: (callback) => ipcRenderer.on('drop-reply', (event, data) => callback(data)),
 });
 
 window.addEventListener('contextmenu', (event) => {
@@ -19,4 +20,12 @@ window.addEventListener('contextmenu', (event) => {
     event.preventDefault();
     ipcRenderer.send('show-context-menu');
   }
+});
+
+window.addEventListener('drop', (event) => {
+  event.preventDefault();
+  const file = event.dataTransfer.files[0];
+  const path = `file:///${webUtils.getPathForFile(file).replace(/\\/g, '/')}`;
+  const id = event.target?.id;
+  ipcRenderer.send('drop', { path, id });
 });
