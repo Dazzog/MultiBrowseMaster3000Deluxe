@@ -50,14 +50,23 @@ function layoutAllViews() {
 
 function processInput(input) {
   // Trim leading/trailing whitespace
-  input = input.trim();
+  input = (input || '').trim();
 
-  // Regulärer Ausdruck für eine grobe URL-Erkennung
-  const urlPattern = /^(https?:\/\/)?([\w-]+\.)+[\w-]{2,}(\/[^\s]*)?$/i;
 
-  if (urlPattern.test(input)) {
-    // Ist eine gültige URL-Struktur, ergänze ggf. http://
-    if (!/^https?:\/\//i.test(input)) {
+  // Gib bei leerem Input sofort about:blank zurück
+  if (!input) {
+    return 'about:blank';
+  }
+
+  // Erweiterter RegEx für URL-Erkennung inklusive http(s), file, und about:blank
+  const urlPattern = /^(https?:\/\/|file:\/\/\/)([\w-]+\.)*[\w-]{2,}([\/?#][^\s]*)?$/i;
+
+  // Sonderfälle wie file://... (ohne Domain) und about:blank
+  const specialCases = /^(file:\/\/\/[^\s]+|about:blank)$/i;
+
+  if (urlPattern.test(input) || specialCases.test(input)) {
+    // Ergänze ggf. http:// bei Domain-URLs ohne Protokoll
+    if (/^([\w-]+\.)+[\w-]{2,}(\/[^\s]*)?$/i.test(input)) {
       input = 'http://' + input;
     }
     return input;
