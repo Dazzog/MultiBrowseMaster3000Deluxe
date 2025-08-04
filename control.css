@@ -1,0 +1,111 @@
+body {
+    margin: 0;
+    padding: 15px;
+    font-family: 'Segoe UI', sans-serif;
+    background: #111;
+    color: #eee;
+    user-select: none;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 15px;
+
+    > :not(.cell) {
+        display: none;
+    }
+}
+
+.cell {
+    background: #1c1c1c;
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 0 5px #000;
+
+    &, .wrapper {
+        display: flex;
+        align-items: center;
+    }
+
+    .wrapper {
+        flex-grow: 1;
+
+        + .wrapper {
+            margin-left: 16px;
+        }
+    }
+
+    &.full-width {
+        grid-column-start: 1;
+        grid-column-end: 3;
+    }
+
+    label {
+        margin-right: 0.3em;
+    }
+}
+
+input, select {
+    flex: 1;
+    padding: 8px 10px;
+    margin: 0 4px;
+    font-size: 14px;
+    background: #2a2a2a;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    outline: none;
+    
+
+    &.drag-target {
+      color: transparent;
+      background-color: #7B52AB;
+    }
+}
+
+button {
+    margin: 0 4px;
+    padding: 4px 4px;
+    font-size: 14px;
+    background: #9768D1;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-content: center;
+}
+
+button:hover {
+    background: #7B52AB;
+}
+
+button.active {
+    background: #F4511E;
+}
+
+button[disabled] {
+    background: #333333;
+    color: #222222;
+    pointer-events: none;
+}
+
+button:not(.active) span:not(:first-child) {
+    display: none;
+}
+
+button.active span:not(:last-child) {
+    display: none;
+}
+
+span.pre-icon {
+    margin-right: 6px;
+    opacity: 0.5;
+}
+
+.material-symbols-outlined.flip-horizontal {
+    transform: scaleX(-1);
+}
