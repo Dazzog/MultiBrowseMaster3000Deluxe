@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('api', {
     onURLUpdate: (callback) => ipcRenderer.on('update-url', (event, data) => callback(data)),
     getDisplays: () => ipcRenderer.invoke('get-displays'),
     moveToDisplay: (index) => ipcRenderer.send('move-to-display', index),
+    loadTicker: () => ipcRenderer.invoke('load-ticker'),
     setTickerText: (text) => ipcRenderer.send('set-ticker-text', text),
     setTickerColor: (color) => ipcRenderer.send('set-ticker-color', color),
     setTickerBackgroundColor: (color) => ipcRenderer.send('set-ticker-background-color', color),

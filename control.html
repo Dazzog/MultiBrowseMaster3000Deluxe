@@ -54,8 +54,8 @@
             <label for="tickerText">Lauftext: </label>
             <input id="tickerText" onkeydown="submitTicker(event)" placeholder="Kein Lauftext"/>
 
-            <input id="tickerColor" onchange="setTickerColor(event)" type="color"/>
-            <input id="tickerBackgroundColor" onchange="setTickerBackgroundColor(event)" type="color"/>
+            <input id="tickerColor" onchange="setTickerColor(event)" type="color" value="#ffffff"/>
+            <input id="tickerBackgroundColor" onchange="setTickerBackgroundColor(event)" type="color" value="#111111"/>
 
             <button onclick="setTicker()">
                 <span class="material-symbols-outlined">subdirectory_arrow_right</span>
@@ -240,6 +240,23 @@
             window.api?.navigate(index, path);
             console.log(path);
             saveAllURLs();
+        }
+    });
+
+    window.api?.loadTicker().then(({tickerText, tickerColor, tickerBackgroundColor}) => {
+        if (tickerText) {
+            tickerInput.value = tickerText;
+            window.api?.setTickerText(tickerText);
+        }
+
+        if (tickerColor) {
+            document.getElementById("tickerColor").value = tickerColor;
+            window.api?.setTickerColor(tickerColor);
+        }
+
+        if (tickerBackgroundColor) {
+            document.getElementById("tickerBackgroundColor").value = tickerBackgroundColor;
+            window.api?.setTickerBackgroundColor(tickerBackgroundColor);
         }
     });
 </script>
