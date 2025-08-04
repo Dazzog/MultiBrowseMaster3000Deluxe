@@ -279,6 +279,14 @@ ipcMain.on('set-ticker-text', (event, text) => {
     layoutAllViews();
 });
 
+ipcMain.on('set-ticker-color', (event, color) => {
+    tickerView.webContents.send('update-ticker-color', color);
+});
+
+ipcMain.on('set-ticker-background-color', (event, color) => {
+    tickerView.webContents.send('update-ticker-background-color', color);
+});
+
 ipcMain.on('drop', (event, path) => {
     event.sender.send('drop-reply', path);
 });

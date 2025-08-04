@@ -52,7 +52,11 @@
 				abc
 			  </span>
             <label for="tickerText">Lauftext: </label>
-            <input id="tickerText" onkeydown="submitTicker(event)" placeholder="Kein Lauftext">
+            <input id="tickerText" onkeydown="submitTicker(event)" placeholder="Kein Lauftext"/>
+
+            <input id="tickerColor" onchange="setTickerColor(event)" type="color"/>
+            <input id="tickerBackgroundColor" onchange="setTickerBackgroundColor(event)" type="color"/>
+
             <button onclick="setTicker()">
                 <span class="material-symbols-outlined">subdirectory_arrow_right</span>
             </button>
@@ -219,6 +223,14 @@
         if (event.key === 'Enter') {
             setTicker();
         }
+    }
+
+    function setTickerColor(event) {
+        window.api?.setTickerColor(event.target.value);
+    }
+
+    function setTickerBackgroundColor(event) {
+        window.api?.setTickerBackgroundColor(event.target.value);
     }
 
     window.api?.onDrop(({path, id}) => {

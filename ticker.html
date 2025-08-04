@@ -15,8 +15,17 @@
 </div>
 
 <script>
+    const textContainer = document.getElementById('text-container');
+    const textElement = document.getElementById('text');
+
     window.api?.onUpdateTickerText((text) => {
-        document.getElementById('text').textContent = text;
+        textElement.textContent = text;
+    });
+    window.api?.onUpdateTickerColor((color) => {
+        textElement.style.color = color;
+    });
+    window.api?.onUpdateTickerBackgroundColor((color) => {
+        document.body.style.backgroundColor = color;
     });
 </script>
 </body>

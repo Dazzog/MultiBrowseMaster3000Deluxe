@@ -11,7 +11,11 @@ contextBridge.exposeInMainWorld('api', {
     getDisplays: () => ipcRenderer.invoke('get-displays'),
     moveToDisplay: (index) => ipcRenderer.send('move-to-display', index),
     setTickerText: (text) => ipcRenderer.send('set-ticker-text', text),
+    setTickerColor: (color) => ipcRenderer.send('set-ticker-color', color),
+    setTickerBackgroundColor: (color) => ipcRenderer.send('set-ticker-background-color', color),
     onUpdateTickerText: (callback) => ipcRenderer.on('update-ticker-text', (_, text) => callback(text)),
+    onUpdateTickerColor: (callback) => ipcRenderer.on('update-ticker-color', (_, color) => callback(color)),
+    onUpdateTickerBackgroundColor: (callback) => ipcRenderer.on('update-ticker-background-color', (_, color) => callback(color)),
     onDrop: (callback) => ipcRenderer.on('drop-reply', (event, data) => callback(data)),
 });
 
