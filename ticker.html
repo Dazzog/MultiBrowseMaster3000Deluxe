@@ -18,8 +18,21 @@
     const textContainer = document.getElementById('text-container');
     const textElement = document.getElementById('text');
 
+    function updateAnimation() {
+        const containerWidth = textContainer.offsetWidth;
+        const textWidth = textElement.scrollWidth;
+
+        const distance = textWidth + containerWidth;
+        const speedPxPerSec = 100;
+        const duration = distance / speedPxPerSec;
+
+        textElement.style.animationDuration = `${duration}s`;
+    }
+
     window.api?.onUpdateTickerText((text) => {
         textElement.textContent = text;
+        requestAnimationFrame(updateAnimation);
+
     });
     window.api?.onUpdateTickerColor((color) => {
         textElement.style.color = color;

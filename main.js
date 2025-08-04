@@ -12,12 +12,13 @@ let fullscreenIndex = null;
 let tickerView = null;
 let tickerText = null;
 
-const dataFile = path.join(app.getPath('userData'), 'urls.json');
+const urlsStoragePath = path.join(app.getPath('userData'), 'urls.json');
+const configPath = path.join(app.getPath('userData'), 'config.json');
 
 function loadStoredURLs() {
-    if (fs.existsSync(dataFile)) {
+    if (fs.existsSync(urlsStoragePath)) {
         try {
-            return JSON.parse(fs.readFileSync(dataFile, 'utf-8'));
+            return JSON.parse(fs.readFileSync(urlsStoragePath, 'utf-8'));
         } catch {
             return [];
         }
@@ -26,7 +27,7 @@ function loadStoredURLs() {
 }
 
 function saveURLs(urlArray) {
-    fs.writeFileSync(dataFile, JSON.stringify(urlArray, null, 2), 'utf-8');
+    fs.writeFileSync(urlsStoragePath, JSON.stringify(urlArray, null, 2), 'utf-8');
 }
 
 function layoutAllViews() {
@@ -90,6 +91,18 @@ function processInput(input) {
     }
 }
 
+function loadSettings() {
+    try {
+        return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    } catch (e) {
+        return {};
+    }
+}
+
+function saveSettings(data) {
+    fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
+}
+
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
@@ -97,11 +110,13 @@ app.commandLine.appendSwitch('disable-background-timer-throttling');
 app.whenReady().then(() => {
     const {width, height} = screen.getPrimaryDisplay().bounds;
 
+    const savedSettings = loadSettings();
+
     displayWindow = new BrowserWindow({
-        x: 0,
-        y: 0,
-        width,
-        height,
+        x: savedSettings.windowX ?? 0,
+        y: savedSettings.windowY ?? 0,
+        width: savedSettings.windowWidth ?? width,
+        height: savedSettings.windowHeight ?? height,
         frame: false,
         fullscreen: true,
         backgroundColor: '#111',
@@ -112,6 +127,17 @@ app.whenReady().then(() => {
     });
 
     displayWindow.setTitle(title);
+
+    displayWindow.on('close', () => {
+        const bounds = displayWindow.getBounds();
+        saveSettings({
+            ...loadSettings(), // merge with existing
+            windowX: bounds.x,
+            windowY: bounds.y,
+            windowWidth: bounds.width,
+            windowHeight: bounds.height,
+        });
+    });
 
     const storedURLs = loadStoredURLs();
 
@@ -164,6 +190,8 @@ app.whenReady().then(() => {
     });
 
     controlWindow = new BrowserWindow({
+        x: savedSettings.controlPanelX ?? null,
+        y: savedSettings.controlPanelY ?? null,
         width: 1280,
         height: 264,
         resizable: false,
@@ -178,6 +206,15 @@ app.whenReady().then(() => {
 
     controlWindow.setMenuBarVisibility(false);
     controlWindow.loadFile('control.html');
+
+    controlWindow.on('close', () => {
+        const bounds = controlWindow.getBounds();
+        saveSettings({
+            ...loadSettings(), // merge with existing
+            controlPanelX: bounds.x,
+            controlPanelY: bounds.y,
+        });
+    });
 
     controlWindow.on('closed', () => {
         if (displayWindow && !displayWindow.isDestroyed()) displayWindow.close();
@@ -274,19 +311,26 @@ ipcMain.on('move-to-display', (event, targetIndex) => {
 
 ipcMain.on('set-ticker-text', (event, text) => {
     tickerView.webContents.send('update-ticker-text', text);
-
     tickerText = text;
     layoutAllViews();
+    saveSettings({...loadSettings(), tickerText: text});
 });
 
 ipcMain.on('set-ticker-color', (event, color) => {
     tickerView.webContents.send('update-ticker-color', color);
+    saveSettings({...loadSettings(), tickerColor: color});
 });
 
 ipcMain.on('set-ticker-background-color', (event, color) => {
     tickerView.webContents.send('update-ticker-background-color', color);
+    saveSettings({...loadSettings(), tickerBackgroundColor: color});
 });
 
 ipcMain.on('drop', (event, path) => {
     event.sender.send('drop-reply', path);
+});
+
+ipcMain.handle('load-ticker', () => {
+    const {tickerText, tickerColor, tickerBackgroundColor} = loadSettings();
+    return {tickerText, tickerColor, tickerBackgroundColor};
 });
