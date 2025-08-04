@@ -57,11 +57,25 @@ input, select {
     border: 1px solid #444;
     border-radius: 4px;
     outline: none;
-    
+
 
     &.drag-target {
-      color: transparent;
-      background-color: #7B52AB;
+        color: transparent;
+        background-color: #7B52AB;
+    }
+}
+
+input[type=color] {
+    padding: 0 2px;
+    width: 32px;
+    max-width: 32px;
+    height: 32px;
+    cursor: pointer;
+    background: #9768D1;
+    border: none;
+
+    &:hover {
+        background: #7B52AB;
     }
 }
 
