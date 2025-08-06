@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('api', {
     saveURLs: (urls) => ipcRenderer.send('save-urls', urls),
     requestStoredURLs: () => ipcRenderer.invoke('load-urls'),
     toggleFullscreen: (index) => ipcRenderer.send('toggle-fullscreen', index),
+    togglePriority: (index) => ipcRenderer.send('toggle-priority', index),
     goBack: (index) => ipcRenderer.send('go-back', index),
     goForward: (index) => ipcRenderer.send('go-forward', index),
     onURLUpdate: (callback) => ipcRenderer.on('update-url', (event, data) => callback(data)),
@@ -18,6 +19,7 @@ contextBridge.exposeInMainWorld('api', {
     onUpdateTickerColor: (callback) => ipcRenderer.on('update-ticker-color', (_, color) => callback(color)),
     onUpdateTickerBackgroundColor: (callback) => ipcRenderer.on('update-ticker-background-color', (_, color) => callback(color)),
     onDrop: (callback) => ipcRenderer.on('drop-reply', (event, data) => callback(data)),
+    getScreenshot: (index) => ipcRenderer.invoke('get-screenshot', index),
 });
 
 window.addEventListener('contextmenu', (event) => {

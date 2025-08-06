@@ -10,11 +10,25 @@ body {
 .grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: auto auto;
+    grid-template-rows: repeat(3, 55px);
     gap: 15px;
 
     > :not(.cell) {
         display: none;
+    }
+}
+
+.grid:has(.priorityBtn.active) {
+    .cell:has(.priorityBtn.active) {
+        grid-column-start: 2;
+        grid-row-start: 1;
+        grid-row-end: 4
+    }
+}
+
+.grid:not(:has(.priorityBtn.active)) {
+    .cell.full-width {
+        grid-row-start: -1;
     }
 }
 
@@ -118,8 +132,20 @@ button.active span:not(:last-child) {
 span.pre-icon {
     margin-right: 6px;
     opacity: 0.5;
+    text-shadow: 3px 3px #222;
 }
 
 .material-symbols-outlined.flip-horizontal {
     transform: scaleX(-1);
+}
+
+.preview-img {
+    background-color: #444;
+    width: 57px;
+    height: 32px;
+    border-radius: 4px;
+    border: 2px solid #666;
+    box-sizing: border-box;
+    object-fit: cover;
+    margin: 0 8px 0 -16px;
 }
