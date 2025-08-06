@@ -8,6 +8,7 @@ let displayWindow;
 let controlWindow;
 let views = [];
 let fullscreenIndex = null;
+let priorityIndex = null;
 
 let tickerView = null;
 let tickerText = null;
@@ -36,30 +37,61 @@ function layoutAllViews() {
     const tickerHeight = tickerText ? winHeight * 0.05 : 0;
     const availableHeight = winHeight - tickerHeight;
 
-    const cols = 2, rows = 2;
-    const viewWidth = Math.floor(winWidth / cols);
-    const viewHeight = Math.floor(availableHeight / rows);
+    if (priorityIndex !== null) {
+        const unpriorizedViews = [...views.filter((view, index) => index !== priorityIndex)];
 
-    for (let i = 0; i < views.length; i++) {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        const x = col * viewWidth;
-        const y = row * (viewHeight + tickerHeight);
+        const viewWidth = Math.floor(winWidth / 3);
+        const viewHeight = Math.floor(availableHeight / 3);
 
-        views[i].setBounds({
-            x,
-            y,
-            width: viewWidth,
-            height: viewHeight
+        for (let i = 0; i < unpriorizedViews.length; i++) {
+
+            unpriorizedViews[i].setBounds({
+                x: 0,
+                y: i * viewHeight,
+                width: viewWidth,
+                height: viewHeight
+            });
+        }
+
+        views[priorityIndex].setBounds({
+            x: viewWidth,
+            y: 0,
+            width: viewWidth * 2,
+            height: viewHeight * 3
+        });
+
+        tickerView.setBounds({
+            x: 0,
+            y: availableHeight,
+            width: winWidth,
+            height: tickerHeight,
+        });
+    } else {
+        const cols = 2, rows = 2;
+        const viewWidth = Math.floor(winWidth / cols);
+        const viewHeight = Math.floor(availableHeight / rows);
+
+        for (let i = 0; i < views.length; i++) {
+            const col = i % cols;
+            const row = Math.floor(i / cols);
+            const x = col * viewWidth;
+            const y = row * (viewHeight + tickerHeight);
+
+            views[i].setBounds({
+                x,
+                y,
+                width: viewWidth,
+                height: viewHeight
+            });
+        }
+
+        tickerView.setBounds({
+            x: 0,
+            y: viewHeight,
+            width: winWidth,
+            height: tickerHeight,
         });
     }
-
-    tickerView.setBounds({
-        x: 0,
-        y: viewHeight,
-        width: winWidth,
-        height: tickerHeight,
-    })
 }
 
 function processInput(input) {
@@ -193,7 +225,7 @@ app.whenReady().then(() => {
         x: savedSettings.controlPanelX ?? null,
         y: savedSettings.controlPanelY ?? null,
         width: 1280,
-        height: 264,
+        height: 340,
         resizable: false,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
@@ -280,6 +312,16 @@ ipcMain.on('toggle-fullscreen', (event, index) => {
     }
 });
 
+ipcMain.on('toggle-priority', (event, index) => {
+    if (priorityIndex == index) {
+        priorityIndex = null;
+    } else {
+        priorityIndex = index;
+    }
+
+    layoutAllViews();
+});
+
 ipcMain.handle('get-displays', () => {
     return screen.getAllDisplays().map((d, i) => ({
         index: i,
@@ -333,4 +375,16 @@ ipcMain.on('drop', (event, path) => {
 ipcMain.handle('load-ticker', () => {
     const {tickerText, tickerColor, tickerBackgroundColor} = loadSettings();
     return {tickerText, tickerColor, tickerBackgroundColor};
+});
+
+ipcMain.handle('get-screenshot', async (event, index) => {
+    if (views) {
+        const targetView = views[index];
+
+        if (targetView?.webContents) {
+
+            const image = await targetView.webContents.capturePage();
+            return image.toDataURL();
+        }
+    }
 });

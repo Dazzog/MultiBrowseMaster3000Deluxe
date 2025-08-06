@@ -15,6 +15,10 @@
     <div class="cell">
         <span class="pre-icon material-symbols-outlined icon"></span>
 
+        <img alt=""
+             class="preview-img"
+             src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR42mP8z/C/HwAFAAL/AV2zNgAAAABJRU5ErkJggg=="/>
+
         <button class="backBtn" disabled>
             <span class="material-symbols-outlined">arrow_back</span>
         </button>
@@ -26,6 +30,9 @@
 
         <button class="navigateBtn">
             <span class="material-symbols-outlined">subdirectory_arrow_right</span>
+        </button>
+        <button class="priorityBtn">
+            <span class="material-symbols-outlined">dock_to_right</span>
         </button>
         <button class="fullscreenBtn">
             <span class="material-symbols-outlined">fullscreen</span>
@@ -80,15 +87,19 @@
         const clone = template.content.cloneNode(true);
         const cell = clone.querySelector(".cell");
         const iconSpan = cell.querySelector(".icon");
+        const preview = cell.querySelector(".preview-img");
         const backBtn = cell.querySelector(".backBtn");
         const forwardBtn = cell.querySelector(".forwardBtn");
         const input = cell.querySelector(".url");
         const navigateBtn = cell.querySelector(".navigateBtn");
         const fullscreenBtn = cell.querySelector(".fullscreenBtn");
+        const priorityBtn = cell.querySelector(".priorityBtn");
 
         // Set dynamic content
         iconSpan.textContent = icon;
         if (flip) iconSpan.classList.add("flip-horizontal");
+
+        preview.id = `preview${index}`;
 
         input.placeholder = label;
         input.id = `url${index}`;
@@ -105,11 +116,15 @@
         fullscreenBtn.id = `fullscreenBtn${index}`;
         fullscreenBtn.onclick = () => toggleFullscreen(index);
 
+        priorityBtn.id = `priorityBtn${index}`;
+        priorityBtn.onclick = () => togglePriority(index);
+
         container.insertBefore(clone, marker);
     });
 
     const inputs = [0, 1, 2, 3].map(i => document.getElementById(`url${i}`));
     const fullscreenBtns = [0, 1, 2, 3].map(i => document.getElementById(`fullscreenBtn${i}`));
+    const priorityBtns = [0, 1, 2, 3].map(i => document.getElementById(`priorityBtn${i}`));
     const tickerInput = document.getElementById(`tickerText`);
 
     inputs.forEach(input => {
@@ -167,7 +182,7 @@
 
     function toggleFullscreen(index) {
         const active = fullscreenBtns[index].classList.contains('active');
-        document.querySelectorAll('button.active').forEach((btn) => {
+        document.querySelectorAll('button.fullscreenBtn.active').forEach((btn) => {
             btn.classList.remove('active');
         });
 
@@ -176,6 +191,19 @@
         }
 
         window.api?.toggleFullscreen(index);
+    }
+
+    function togglePriority(index) {
+        const active = priorityBtns[index].classList.contains('active');
+        document.querySelectorAll('button.priorityBtn.active').forEach((btn) => {
+            btn.classList.remove('active');
+        });
+
+        if (!active) {
+            priorityBtns[index].classList.add('active');
+        }
+
+        window.api?.togglePriority(index);
     }
 
     function goBack(index) {
@@ -259,6 +287,21 @@
             window.api?.setTickerBackgroundColor(tickerBackgroundColor);
         }
     });
+
+    function updatePreview(index) {
+        window.api?.getScreenshot(index).then((dataUrl) => {
+            if (dataUrl) {
+                const img = document.getElementById(`preview${index}`);
+                if (img) img.src = dataUrl;
+            }
+        });
+    }
+
+    setInterval(() => {
+        for (let i = 0; i < 4; i++) {
+            updatePreview(i);
+        }
+    }, 4000);
 </script>
 </body>
 </html>
