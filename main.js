@@ -182,6 +182,26 @@ app.whenReady().then(() => {
         views.push(view);
         displayWindow.contentView.addChildView(view);
 
+        view.webContents.on('did-fail-load', (_e, errorCode, errorDesc, validatedURL, isMainFrame) => {
+            if (!isMainFrame) return;
+            // Eigene Fehlerseite laden und Infos übergeben
+            view.webContents.loadFile(path.join(__dirname, 'error.html'), {
+                query: {code: String(errorCode), desc: errorDesc, url: validatedURL}
+            });
+        });
+
+        const ses = view.webContents.session;
+        ses.webRequest.onCompleted({urls: ['*://*/*']}, (details) => {
+            if (details.webContentsId !== view.webContents.id) return;
+            if (details.resourceType !== 'mainFrame') return;
+
+            if (details.statusCode >= 400) {
+                view.webContents.loadFile(path.join(__dirname, 'error.html'), {
+                    query: {code: String(details.statusCode), url: details.url}
+                });
+            }
+        });
+
         const url = storedURLs[i] || 'https://picsum.photos/1920/1080';
         view.webContents.loadURL(url);
 

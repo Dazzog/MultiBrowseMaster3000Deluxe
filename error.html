@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8"/>
+    <title>Error</title>
+
+    <link href="error.css" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@400" rel="stylesheet"/>
+</head>
+
+<body>
+<h1>
+    <span class="material-symbols-outlined">error</span>
+    Seite konnte nicht geladen werden
+</h1>
+
+<div class="error-details">
+    <div><span class="label">Fehlercode:</span> <span id="code"></span></div>
+    <div><span class="label">Beschreibung:</span> <span id="desc"></span></div>
+    <div><span class="label">URL:</span> <span id="url"></span></div>
+</div>
+
+<a class="reloadBtn" href="#" onclick="reload()">
+    <button>
+        <span class="material-symbols-outlined">refresh</span>
+        Erneut versuchen
+    </button>
+</a>
+
+<script>
+    const params = new URLSearchParams(location.search);
+    document.getElementById('code').textContent = params.get('code') || '—';
+    document.getElementById('desc').textContent = params.get('desc') || '—';
+    document.getElementById('url').textContent = params.get('url') || '—';
+
+    function reload() {
+        // Versucht, die ursprüngliche URL erneut zu laden
+        const target = params.get('url');
+        if (target) {
+            location.href = target;
+        } else {
+            location.reload();
+        }
+    }
+</script>
+</body>
+
+</html>
