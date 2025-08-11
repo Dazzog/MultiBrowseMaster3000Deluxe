@@ -104,23 +104,26 @@ function processInput(input) {
         return 'https://picsum.photos/1920/1080';
     }
 
-    // Erweiterter RegEx für URL-Erkennung inklusive http(s), file, und about:blank
+    // Regex für vollständige URLs mit Protokoll
     const urlPattern = /^(https?:\/\/|file:\/\/)([\w-]+\.)*[\w-]{2,}([\/?#][^\s]*)?$/i;
 
     // Sonderfälle wie file://... (ohne Domain) und about:blank
     const specialCases = /^(file:\/\/.+|about:blank)$/i;
 
+    // Regex für Domains ohne Protokoll (inkl. localhost, IPs, Ports)
+    const bareDomainPattern = /^(([\w.-]+\.[a-z]{2,})|(localhost)|(\d{1,3}(\.\d{1,3}){3}))(:\d+)?(\/[^\s]*)?$/i;
+
     if (urlPattern.test(input) || specialCases.test(input)) {
-        // Ergänze ggf. http:// bei Domain-URLs ohne Protokoll
-        if (/^([\w-]+\.)+[\w-]{2,}(\/[^\s]*)?$/i.test(input)) {
-            input = 'http://' + input;
-        }
         return input;
-    } else {
-        // Keine gültige URL, erstelle Google-Suche
-        const encodedQuery = encodeURIComponent(input);
-        return `https://www.google.com/search?q=${encodedQuery}`;
     }
+
+    if (bareDomainPattern.test(input)) {
+        return 'http://' + input;
+    }
+
+    // Keine gültige URL, benutze Google-Suche
+    const encodedQuery = encodeURIComponent(input);
+    return `https://www.google.com/search?q=${encodedQuery}`;
 }
 
 function loadSettings() {
