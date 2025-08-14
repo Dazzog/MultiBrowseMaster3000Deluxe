@@ -20,6 +20,12 @@ contextBridge.exposeInMainWorld('api', {
     onUpdateTickerBackgroundColor: (callback) => ipcRenderer.on('update-ticker-background-color', (_, color) => callback(color)),
     onDrop: (callback) => ipcRenderer.on('drop-reply', (event, data) => callback(data)),
     getScreenshot: (index) => ipcRenderer.invoke('get-screenshot', index),
+    getCaptureSources: () => ipcRenderer.invoke('get-capture-sources'),
+    setDisplayCaptureSource: (viewIndex, sourceId) => ipcRenderer.invoke('set-display-capture-source', {
+        viewIndex,
+        sourceId
+    }),
+    startDisplayCapture: (viewIndex) => ipcRenderer.invoke('start-display-capture', {viewIndex}),
 });
 
 window.addEventListener('contextmenu', (event) => {

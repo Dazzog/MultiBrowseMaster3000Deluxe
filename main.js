@@ -1,4 +1,4 @@
-const {app, BrowserWindow, WebContentsView, ipcMain, screen, Menu} = require('electron');
+const {app, BrowserWindow, desktopCapturer, ipcMain, Menu, screen, session, WebContentsView} = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -136,6 +136,13 @@ function loadSettings() {
 
 function saveSettings(data) {
     fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
+}
+
+function findViewIndexByFrame(request) {
+    for (let i = 0; i < views.length; i++) {
+        if (views[i].webContents.mainFrame === request.frame) return i;
+    }
+    return -1;
 }
 
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
@@ -287,6 +294,35 @@ app.whenReady().then(() => {
         const menu = Menu.buildFromTemplate(template);
         menu.popup(BrowserWindow.fromWebContents(event.sender));
     });
+
+    app.whenReady().then(() => {
+        session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+            try {
+                const viewIndex = findViewIndexByFrame(request);
+                if (viewIndex < 0) return callback({}); // keine Freigabe
+
+                const selection = displayCaptureSelections.get(viewIndex);
+                if (!selection) return callback({});    // keine Quelle gewählt -> verweigern
+
+                // Aktuelle Liste holen, daraus die gewünschte Quelle heraussuchen
+                const sources = await desktopCapturer.getSources({
+                    types: ['screen', 'window'],
+                    fetchWindowIcons: true,
+                });
+
+                const picked = sources.find(s => s.id === selection.sourceId);
+                // Quelle nicht (mehr) vorhanden
+                if (!picked) return callback({});
+
+                callback({
+                    video: picked
+                });
+            } catch (err) {
+                console.error('setDisplayMediaRequestHandler error:', err);
+                callback({}); // sicher verweigern
+            }
+        });
+    });
 });
 
 ipcMain.on('navigate', (event, {index, url}) => {
@@ -410,4 +446,52 @@ ipcMain.handle('get-screenshot', async (event, index) => {
             return image.toDataURL();
         }
     }
+});
+
+const displayCaptureSelections = new Map();
+
+ipcMain.handle('set-display-capture-source', async (event, {viewIndex, sourceId, withAudio}) => {
+    displayCaptureSelections.set(viewIndex, {sourceId, withAudio: !!withAudio});
+});
+
+ipcMain.handle('get-capture-sources', async () => {
+    const sources = await desktopCapturer.getSources({
+        types: ['screen', 'window'],
+        fetchWindowIcons: true
+    });
+
+    return sources.map(s => ({
+        id: s.id, name: s.name,
+        display_id: s.display_id,
+        iconDataUrl: s.appIcon?.toDataURL?.() ?? null,
+        thumbDataUrl: s.thumbnail?.toDataURL?.() ?? null
+    }));
+});
+
+ipcMain.handle('start-display-capture', async (event, {viewIndex}) => {
+    const view = views[viewIndex];
+    if (!view) return;
+
+    // lokale Seite laden oder injizieren – hier: injizieren
+    await view.webContents.executeJavaScript(`
+    (async () => {
+      try {
+        // Nutzer-Gesture simuliert ihr via Button im Control; hier wird nur gestartet
+        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+        let video = document.getElementById('___cap___');
+        if (!video) {
+          video = document.createElement('video');
+          video.id = '___cap___';
+          video.autoplay = true;
+          video.playsInline = true;
+          video.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;object-fit:contain;background:#000;z-index:2147483647';
+          document.body.innerHTML = ''; // View komplett für Stream verwenden
+          document.body.appendChild(video);
+        }
+        video.srcObject = stream;
+      } catch (e) {
+        console.error('getDisplayMedia failed', e);
+      }
+    })();
+  `);
 });

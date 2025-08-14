@@ -19,22 +19,27 @@
              class="preview-img"
              src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR42mP8z/C/HwAFAAL/AV2zNgAAAABJRU5ErkJggg=="/>
 
-        <button class="backBtn" disabled>
+        <button class="iconBtn backBtn" disabled>
             <span class="material-symbols-outlined">arrow_back</span>
         </button>
-        <button class="forwardBtn" disabled>
+        <button class="iconBtn forwardBtn" disabled>
             <span class="material-symbols-outlined">arrow_forward</span>
         </button>
 
         <input class="url" onkeydown="" placeholder="">
 
-        <button class="navigateBtn">
+        <button class="iconBtn navigateBtn">
             <span class="material-symbols-outlined">subdirectory_arrow_right</span>
         </button>
-        <button class="priorityBtn">
+
+        <button class="iconBtn screenShareBtn">
+            <span class="material-symbols-outlined">screen_share</span>
+        </button>
+
+        <button class="iconBtn priorityBtn">
             <span class="material-symbols-outlined">dock_to_right</span>
         </button>
-        <button class="fullscreenBtn">
+        <button class="iconBtn fullscreenBtn">
             <span class="material-symbols-outlined">fullscreen</span>
             <span class="material-symbols-outlined">fullscreen_exit</span>
         </button>
@@ -71,6 +76,19 @@
     </div>
 </div>
 
+<div aria-label="Bildschirmquelle wählen" aria-modal="true" class="cap-modal cap-hidden" id="capModal" role="dialog">
+    <div class="cap-box">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+            <h3 style="margin:0;font-size:16px">Quelle wählen</h3>
+
+            <button class="cap-btn" id="capClose">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <div aria-live="polite" class="cap-grid" id="capGrid"></div>
+    </div>
+</div>
+
 <script>
     const viewConfigs = [
         {index: 0, label: "View 1 (oben links)", icon: "position_top_right", flip: true},
@@ -94,6 +112,7 @@
         const navigateBtn = cell.querySelector(".navigateBtn");
         const fullscreenBtn = cell.querySelector(".fullscreenBtn");
         const priorityBtn = cell.querySelector(".priorityBtn");
+        const screenShareBtn = cell.querySelector(".screenShareBtn");
 
         // Set dynamic content
         iconSpan.textContent = icon;
@@ -118,6 +137,14 @@
 
         priorityBtn.id = `priorityBtn${index}`;
         priorityBtn.onclick = () => togglePriority(index);
+
+        screenShareBtn.id = `screenShareBtn${index}`;
+        screenShareBtn.onclick = async () => {
+            openCapturePicker(index, async (picked) => {
+                await window.api.setDisplayCaptureSource(index, picked.id);
+                await window.api.startDisplayCapture(index);
+            });
+        };
 
         container.insertBefore(clone, marker);
     });
@@ -266,7 +293,6 @@
             document.getElementById(id).value = path;
             const index = +id[3];
             window.api?.navigate(index, path);
-            console.log(path);
             saveAllURLs();
         }
     });
@@ -302,6 +328,53 @@
             updatePreview(i);
         }
     }, 4000);
+
+    const capModal = document.getElementById('capModal');
+    const capGrid = document.getElementById('capGrid');
+    const capClose = document.getElementById('capClose');
+
+    function showCapModal(show) {
+        capModal.classList.toggle('cap-hidden', !show);
+        if (show) capModal.focus();
+    }
+
+    async function openCapturePicker(viewIndex, onPicked) {
+        showCapModal(true);
+        capGrid.innerHTML = '<div style="opacity:.7">Lade Quellen …</div>';
+        try {
+            const sources = await window.api.getCaptureSources();
+            if (!sources?.length) {
+                capGrid.innerHTML = '<div style="opacity:.7">Keine Quellen gefunden.</div>';
+                return;
+            }
+            capGrid.innerHTML = '';
+            for (const s of sources) {
+                const card = document.createElement('button');
+                card.type = 'button';
+                card.className = 'cap-item';
+                card.innerHTML = `
+        <img class="cap-thumb" alt="" src="${s.thumbDataUrl || ''}">
+        <div class="cap-name">${s.name || s.id}</div>
+      `;
+                if (s.id.startsWith('screen')) {
+                    const iconEl = document.createElement('span');
+                    iconEl.classList.add('material-symbols-outlined');
+                    iconEl.innerHTML = 'monitor';
+                    card.appendChild(iconEl);
+                }
+
+                card.onclick = async () => {
+                    showCapModal(false);
+                    onPicked?.(s);
+                };
+                capGrid.appendChild(card);
+            }
+        } catch (e) {
+            capGrid.innerHTML = `<div style="color:#ff8">${e.message || e}</div>`;
+        }
+    }
+
+    capClose.onclick = () => showCapModal(false);
 </script>
 </body>
 </html>
