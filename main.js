@@ -212,10 +212,10 @@ app.whenReady().then(() => {
         const url = (storedURLs.viewUrls || [])[i] || storedURLs[i] || 'https://picsum.photos/1920/1080';
         view.webContents.loadURL(url);
 
-        function sendNavUpdate(index) {
+        function sendNavUpdate(index, inpage) {
             const view = views[index];
 
-            if (view.injectedCssKey) {
+            if (view.injectedCssKey && !inpage) {
                 injectForceVideoCss(view, view.injectedCssKey);
             }
 
@@ -229,8 +229,8 @@ app.whenReady().then(() => {
             });
         }
 
-        view.webContents.on('did-navigate', () => sendNavUpdate(i));
-        view.webContents.on('did-navigate-in-page', () => sendNavUpdate(i));
+        view.webContents.on('did-navigate', (e) => sendNavUpdate(i));
+        view.webContents.on('did-navigate-in-page', (e) => sendNavUpdate(i, true));
 
         view.webContents.setWindowOpenHandler(({url}) => {
             view.webContents.loadURL(url); // in der aktuellen View laden
@@ -295,7 +295,7 @@ app.whenReady().then(() => {
     });
 
     controlView.webContents.on('did-navigate', () => sendNavUpdate('control'));
-    controlView.webContents.on('did-navigate-in-page', () => sendNavUpdate('control'));
+    controlView.webContents.on('did-navigate-in-page', () => sendNavUpdate('control', true));
 
     controlView.webContents.setWindowOpenHandler(({url}) => {
         controlView.webContents.loadURL(url);
