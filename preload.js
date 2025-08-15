@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('api', {
         sourceId
     }),
     startDisplayCapture: (viewIndex) => ipcRenderer.invoke('start-display-capture', {viewIndex}),
+    toggleForceVideo: (index) => ipcRenderer.send('toggle-force-video', index),
 });
 
 window.addEventListener('contextmenu', (event) => {

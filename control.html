@@ -47,6 +47,10 @@
             <span class="material-symbols-outlined">fullscreen</span>
             <span class="material-symbols-outlined">fullscreen_exit</span>
         </button>
+        <button class="iconBtn forceVideoBtn">
+            <span class="material-symbols-outlined">hangout_video</span>
+            <span class="material-symbols-outlined">hangout_video_off</span>
+        </button>
     </div>
 </template>
 
@@ -132,6 +136,7 @@
         const forwardBtn = cell.querySelector(".forwardBtn");
         const input = cell.querySelector(".url");
         const navigateBtn = cell.querySelector(".navigateBtn");
+        const forceVideoBtn = cell.querySelector(".forceVideoBtn");
         const fullscreenBtn = cell.querySelector(".fullscreenBtn");
         const priorityBtn = cell.querySelector(".priorityBtn");
         const screenShareBtn = cell.querySelector(".screenShareBtn");
@@ -146,15 +151,26 @@
         input.id = `url${index}`;
         input.onkeydown = (e) => submitURL(e, index);
 
-        pasteBtn.onclick = () => pasteControlUrl(index);
+        pasteBtn.onclick = () => {
+            pasteControlUrl(index);
+        }
 
         backBtn.id = `backBtn${index}`;
-        backBtn.onclick = () => goBack(index);
+        backBtn.onclick = () => {
+            goBack(index);
+        }
 
         forwardBtn.id = `forwardBtn${index}`;
-        forwardBtn.onclick = () => goForward(index);
+        forwardBtn.onclick = () => {
+            goForward(index);
+        }
 
-        navigateBtn.onclick = () => navigate(index);
+        navigateBtn.onclick = () => {
+            navigate(index);
+        }
+
+        forceVideoBtn.id = `forceVideoBtn${index}`;
+        forceVideoBtn.onclick = () => toggleForceVideo(index);
 
         fullscreenBtn.id = `fullscreenBtn${index}`;
         fullscreenBtn.onclick = () => toggleFullscreen(index);
@@ -175,6 +191,7 @@
 
     const inputs = [];
     [0, 1, 2, 3, 'control'].forEach(i => inputs[i] = document.getElementById(`url${i}`));
+    const forceVideoBtns = [0, 1, 2, 3].map(i => document.getElementById(`forceVideoBtn${i}`));
     const fullscreenBtns = [0, 1, 2, 3].map(i => document.getElementById(`fullscreenBtn${i}`));
     const priorityBtns = [0, 1, 2, 3].map(i => document.getElementById(`priorityBtn${i}`));
     const tickerInput = document.getElementById(`tickerText`);
@@ -236,6 +253,19 @@
         if (event.key === 'Enter') {
             navigate(index);
         }
+    }
+
+    function toggleForceVideo(index) {
+        const active = forceVideoBtns[index].classList.contains('active');
+        const btn = forceVideoBtns[index];
+
+        if (!active) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+
+        window.api?.toggleForceVideo(index);
     }
 
     function toggleFullscreen(index) {
@@ -406,7 +436,10 @@
         }
     }
 
-    capClose.onclick = () => showCapModal(false);
+    capClose.onclick = () => {
+        showCapModal(false);
+        window.api.cancelCaptureSourcesSelect();
+    }
 </script>
 </body>
 </html>

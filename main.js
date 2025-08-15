@@ -213,6 +213,13 @@ app.whenReady().then(() => {
         view.webContents.loadURL(url);
 
         function sendNavUpdate(index) {
+            const view = views[index];
+
+            if (view.injectedCssKey) {
+                injectForceVideoCss(view, view.injectedCssKey);
+            }
+
+
             const wc = views[index].webContents;
             controlWindow.webContents.send('update-url', {
                 index,
@@ -374,8 +381,9 @@ app.whenReady().then(() => {
 });
 
 ipcMain.on('navigate', (event, {index, url}) => {
-    if (views[index]) {
-        views[index].webContents.loadURL(processInput(url));
+    const view = views[index];
+    if (view) {
+        view.webContents.loadURL(processInput(url));
     }
 });
 
@@ -416,6 +424,53 @@ ipcMain.on('toggle-fullscreen', (event, index) => {
                 views[i].setBounds({x: 0, y: 0, width: 0, height: 0});
             }
         }
+    }
+});
+
+function injectForceVideoCss(view, oldKey) {
+    if (oldKey) {
+        view.webContents.removeInsertedCSS(oldKey).then(() => injectForceVideoCss(view));
+    } else {
+        view.webContents.insertCSS(
+            `
+            video {
+                position: fixed !important;
+                inset: 0 !important;
+                margin: 0 !important;
+                width: 100vw !important;
+                max-width: 100vw !important;
+                height: 100vh !important;
+                max-height: 100vh !important;
+                object-fit: contain !important;
+                z-index: 2147483647 !important;
+                background-color: #111 !important;
+            }
+            
+            * {
+              overflow: hidden !important;
+            }
+
+            :not(video) {
+              max-width: 0 !important;
+              max-height: 0 !important;
+              z-index: 0 !important;
+            }
+            `
+        ).then(key => {
+            view.injectedCssKey = key;
+        });
+    }
+}
+
+ipcMain.on('toggle-force-video', (event, index) => {
+    const view = views[index];
+
+    if (!view.injectedCssKey) {
+        injectForceVideoCss(view);
+    } else {
+        view.webContents.removeInsertedCSS(view.injectedCssKey).then(() => {
+            view.injectedCssKey = null;
+        })
     }
 });
 
