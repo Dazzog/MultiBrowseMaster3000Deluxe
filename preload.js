@@ -2,7 +2,7 @@ const {contextBridge, ipcRenderer, webUtils} = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
     navigate: (index, url) => ipcRenderer.send('navigate', {index, url}),
-    saveURLs: (urls) => ipcRenderer.send('save-urls', urls),
+    saveURLs: (viewUrls, controlUrl) => ipcRenderer.send('save-urls', {viewUrls, controlUrl}),
     requestStoredURLs: () => ipcRenderer.invoke('load-urls'),
     toggleFullscreen: (index) => ipcRenderer.send('toggle-fullscreen', index),
     togglePriority: (index) => ipcRenderer.send('toggle-priority', index),
@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('api', {
     onDrop: (callback) => ipcRenderer.on('drop-reply', (event, data) => callback(data)),
     getScreenshot: (index) => ipcRenderer.invoke('get-screenshot', index),
     getCaptureSources: () => ipcRenderer.invoke('get-capture-sources'),
+    cancelCaptureSourcesSelect: () => ipcRenderer.invoke('cancel-capture-sources-select'),
     setDisplayCaptureSource: (viewIndex, sourceId) => ipcRenderer.invoke('set-display-capture-source', {
         viewIndex,
         sourceId

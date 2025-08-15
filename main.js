@@ -209,7 +209,7 @@ app.whenReady().then(() => {
             }
         });
 
-        const url = storedURLs[i] || 'https://picsum.photos/1920/1080';
+        const url = (storedURLs.viewUrls || [])[i] || storedURLs[i] || 'https://picsum.photos/1920/1080';
         view.webContents.loadURL(url);
 
         function sendNavUpdate(index) {
@@ -254,9 +254,11 @@ app.whenReady().then(() => {
     controlWindow = new BrowserWindow({
         x: savedSettings.controlPanelX ?? null,
         y: savedSettings.controlPanelY ?? null,
-        width: 1280,
-        height: 340,
-        resizable: false,
+        width: savedSettings.controlPanelWidth ?? 1280,
+        minWidth: 1168,
+        height: savedSettings.controlPanelHeight ?? 980,
+        minHeight: 400,
+        resizable: true,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true
@@ -264,18 +266,64 @@ app.whenReady().then(() => {
         icon: path.join(__dirname, 'assets', 'icon.ico'),
     });
 
+    if (savedSettings.controlPanelMax) controlWindow.maximize();
+
     controlWindow.setTitle('Control Panel - ' + title);
 
     controlWindow.setMenuBarVisibility(false);
     controlWindow.loadFile('control.html');
 
+    const controlView = new WebContentsView({webPreferences: {contextIsolation: true}});
+    views['control'] = controlView;
+    controlWindow.contentView.addChildView(controlView);
+    const url = storedURLs.controlUrl || 'https://picsum.photos/1920/1080';
+    controlView.webContents.loadURL(url);
+
+    const [controlWinWidth, controlWinHeight] = controlWindow.getContentSize();
+    controlView.setBounds({
+        x: 0,
+        y: 56,
+        width: controlWinWidth,
+        height: controlWinHeight - 329
+    });
+
+    controlView.webContents.on('did-navigate', () => sendNavUpdate('control'));
+    controlView.webContents.on('did-navigate-in-page', () => sendNavUpdate('control'));
+
+    controlView.webContents.setWindowOpenHandler(({url}) => {
+        controlView.webContents.loadURL(url);
+        return {action: 'deny'};
+    });
+
+    controlWindow.on('resize', () => {
+        const [controlWinWidth, controlWinHeight] = controlWindow.getContentSize();
+        controlView.setBounds({
+            x: 0,
+            y: 56,
+            width: controlWinWidth,
+            height: controlWinHeight - 355
+        });
+    })
+
     controlWindow.on('close', () => {
         const bounds = controlWindow.getBounds();
-        saveSettings({
-            ...loadSettings(), // merge with existing
+
+        let settings = {
+            ...loadSettings(),
             controlPanelX: bounds.x,
             controlPanelY: bounds.y,
-        });
+            controlPanelMax: controlWindow.isMaximized()
+        };
+
+        if (!controlWindow.isMaximized()) {
+            settings = {
+                ...settings,
+                controlPanelWidth: bounds.width,
+                controlPanelHeight: bounds.height,
+            };
+        }
+
+        saveSettings(settings);
     });
 
     controlWindow.on('closed', () => {
@@ -452,6 +500,7 @@ const displayCaptureSelections = new Map();
 
 ipcMain.handle('set-display-capture-source', async (event, {viewIndex, sourceId, withAudio}) => {
     displayCaptureSelections.set(viewIndex, {sourceId, withAudio: !!withAudio});
+    views['control'].setVisible(true);
 });
 
 ipcMain.handle('get-capture-sources', async () => {
@@ -460,12 +509,18 @@ ipcMain.handle('get-capture-sources', async () => {
         fetchWindowIcons: true
     });
 
+    views['control'].setVisible(false);
+
     return sources.map(s => ({
         id: s.id, name: s.name,
         display_id: s.display_id,
         iconDataUrl: s.appIcon?.toDataURL?.() ?? null,
         thumbDataUrl: s.thumbnail?.toDataURL?.() ?? null
     }));
+});
+
+ipcMain.handle('cancel-capture-sources-select', async () => {
+    views['control'].setVisible(true);
 });
 
 ipcMain.handle('start-display-capture', async (event, {viewIndex}) => {
