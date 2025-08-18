@@ -1,5 +1,17 @@
-const {app, BrowserWindow, desktopCapturer, ipcMain, Menu, screen, session, WebContentsView} = require('electron');
+const {
+    app,
+    BrowserWindow,
+    desktopCapturer,
+    ipcMain,
+    Menu,
+    screen,
+    session,
+    webContents,
+    WebContentsView
+} = require('electron');
 const path = require('path');
+const {ElectronBlocker} = require('@ghostery/adblocker-electron');
+const fetch = require('cross-fetch');
 const fs = require('fs');
 
 const title = 'MultiBrowseMaster 3000 Deluxe';
@@ -145,9 +157,24 @@ function findViewIndexByFrame(request) {
     return -1;
 }
 
-app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
-app.commandLine.appendSwitch('disable-renderer-backgrounding');
-app.commandLine.appendSwitch('disable-background-timer-throttling');
+let blocker;
+
+async function getAdBlocker() {
+    if (!blocker) {
+        // persistenter Cache beschleunigt den Start
+        const cachePath = path.join(app.getPath('userData'), 'adblocker.bin');
+        blocker = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch);
+        // Optionales Debug
+        blocker.on('request-blocked', ({url}) => console.debug('[adblock] blocked:', url));
+        blocker.on('request-redirected', ({url}) => console.debug('[adblock] redirected:', url));
+    }
+    return blocker;
+}
+
+async function enableAdblockForSession(session) {
+    const blocker = await getAdBlocker();
+    blocker.enableBlockingInSession(session); // idempotent – mehrfacher Aufruf ist ok
+}
 
 function isErrorPage(url) {
     try {
@@ -159,245 +186,44 @@ function isErrorPage(url) {
     }
 }
 
-app.whenReady().then(() => {
-    const {width, height} = screen.getPrimaryDisplay().bounds;
-
-    const savedSettings = loadSettings();
-
-    displayWindow = new BrowserWindow({
-        x: savedSettings.windowX ?? 0,
-        y: savedSettings.windowY ?? 0,
-        width: savedSettings.windowWidth ?? width,
-        height: savedSettings.windowHeight ?? height,
-        frame: false,
-        fullscreen: true,
-        backgroundColor: '#111',
-        webPreferences: {
-            contextIsolation: true
-        },
-        icon: path.join(__dirname, 'assets', 'icon.ico'),
+const getViewErrorHandler = (view) => ((_e, errorCode, errorDesc, validatedURL, isMainFrame) => {
+    if (!isMainFrame || isErrorPage(view.webContents.getURL())) return;
+    // Eigene Fehlerseite laden und Infos übergeben
+    view.webContents.loadFile(path.join(__dirname, 'error.html'), {
+        query: {code: String(errorCode), desc: errorDesc, url: validatedURL}
     });
+});
 
-    displayWindow.setTitle(title);
+function setDefaultViewSettings(view) {
+    const wc = view.webContents;
 
-    displayWindow.on('close', () => {
-        const bounds = displayWindow.getBounds();
-        saveSettings({
-            ...loadSettings(), // merge with existing
-            windowX: bounds.x,
-            windowY: bounds.y,
-            windowWidth: bounds.width,
-            windowHeight: bounds.height,
-        });
-    });
+    wc.on('did-fail-load', getViewErrorHandler(view));
+}
 
-    const storedURLs = loadStoredURLs();
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
 
-    const getViewErrorHandler = (view) => ((_e, errorCode, errorDesc, validatedURL, isMainFrame) => {
-        if (!isMainFrame || isErrorPage(view.webContents.getURL())) return;
-        // Eigene Fehlerseite laden und Infos übergeben
-        view.webContents.loadFile(path.join(__dirname, 'error.html'), {
-            query: {code: String(errorCode), desc: errorDesc, url: validatedURL}
-        });
-    });
+app.whenReady()
+    .then(async () => {
+        const defaultSession = session.defaultSession;
 
-    for (let i = 0; i < 4; i++) {
-        const view = new WebContentsView({webPreferences: {contextIsolation: true}});
+        defaultSession.webRequest.onCompleted({urls: ['*://*/*']}, (details) => {
+            if (!details.webContentsId) return;
+            const wc = webContents.fromId(details.webContentsId);
 
-        views.push(view);
-        displayWindow.contentView.addChildView(view);
-
-        view.webContents.on('did-fail-load', getViewErrorHandler(view));
-
-        const ses = view.webContents.session;
-        ses.webRequest.onCompleted({urls: ['*://*/*']}, (details) => {
-            if (details.webContentsId !== view.webContents.id) return;
+            if (!wc) return;
             if (details.resourceType !== 'mainFrame') return;
             if (isErrorPage(details.url)) return;
 
             if (details.statusCode >= 400) {
-                view.webContents.loadFile(path.join(__dirname, 'error.html'), {
+                wc.loadFile(path.join(__dirname, 'error.html'), {
                     query: {code: String(details.statusCode), url: details.url}
                 });
             }
         });
 
-        const url = (storedURLs.viewUrls || [])[i] || storedURLs[i] || 'https://picsum.photos/1920/1080';
-        view.webContents.loadURL(url);
-
-        function sendNavUpdate(index, inpage) {
-            const view = views[index];
-
-            // Clear duplicates from history
-            const history = view.webContents.navigationHistory;
-            const allEntries = history.getAllEntries();
-            const entriesToDelete = allEntries.filter((entry, index) => {
-                return isErrorPage(entry.url) || (index > 0 && allEntries[index - 1].url === entry.url);
-            }).map(entry => allEntries.indexOf(entry)).sort().reverse();
-            entriesToDelete.forEach(entry => history.removeEntryAtIndex(entry));
-
-            if (view.injectedCssKey && !inpage) {
-                injectForceVideoCss(view, view.injectedCssKey);
-            }
-
-
-            const wc = views[index].webContents;
-            let url = wc.getURL();
-            if (isErrorPage(wc.getURL())) {
-                url = new URL(url).searchParams.get('url');
-            }
-
-            controlWindow.webContents.send('update-url', {
-                index,
-                url,
-                canGoBack: wc.navigationHistory.canGoBack(),
-                canGoForward: wc.navigationHistory.canGoForward()
-            });
-        }
-
-        view.webContents.on('did-navigate', (e) => sendNavUpdate(i));
-        view.webContents.on('did-navigate-in-page', (e) => sendNavUpdate(i, true));
-
-        view.webContents.setWindowOpenHandler(({url}) => {
-            const targetUrl = new URL(url);
-            const currentUrl = new URL(view.webContents.getURL());
-
-            const sameHost = targetUrl.hostname === currentUrl.hostname;
-
-            if (sameHost) {
-                view.webContents.loadURL(url);
-            } else {
-                console.warn('Blocked opening URL in new window', url);
-            }
-            return {action: 'deny'};
-        });
-    }
-
-    tickerView = new WebContentsView({
-        webPreferences: {
-            preload: path.join(__dirname, 'preload.js'),
-            contextIsolation: true,
-            nodeIntegration: false
-        }
-    });
-    tickerView.webContents.loadFile('ticker.html');
-    displayWindow.contentView.addChildView(tickerView);
-
-    layoutAllViews();
-
-    displayWindow.on('resize', () => {
-        if (fullscreenIndex === null) layoutAllViews();
-    });
-
-    displayWindow.on('closed', () => {
-        if (controlWindow && !controlWindow.isDestroyed()) controlWindow.close();
-    });
-
-    controlWindow = new BrowserWindow({
-        x: savedSettings.controlPanelX ?? null,
-        y: savedSettings.controlPanelY ?? null,
-        width: savedSettings.controlPanelWidth ?? 1280,
-        minWidth: 1168,
-        height: savedSettings.controlPanelHeight ?? 980,
-        minHeight: 400,
-        resizable: true,
-        webPreferences: {
-            preload: path.join(__dirname, 'preload.js'),
-            contextIsolation: true
-        },
-        icon: path.join(__dirname, 'assets', 'icon.ico'),
-    });
-
-    if (savedSettings.controlPanelMax) controlWindow.maximize();
-
-    controlWindow.setTitle('Control Panel - ' + title);
-
-    controlWindow.setMenuBarVisibility(false);
-    controlWindow.loadFile('control.html');
-
-    const controlView = new WebContentsView({webPreferences: {contextIsolation: true}});
-    views['control'] = controlView;
-    controlWindow.contentView.addChildView(controlView);
-    const url = storedURLs.controlUrl || 'https://picsum.photos/1920/1080';
-    controlView.webContents.loadURL(url);
-
-    const [controlWinWidth, controlWinHeight] = controlWindow.getContentSize();
-    controlView.setBounds({
-        x: 0,
-        y: 56,
-        width: controlWinWidth,
-        height: controlWinHeight - 329
-    });
-
-    controlView.webContents.on('did-navigate', () => sendNavUpdate('control'));
-    controlView.webContents.on('did-navigate-in-page', () => sendNavUpdate('control', true));
-
-    controlView.webContents.setWindowOpenHandler(({url}) => {
-        const targetUrl = new URL(url);
-        const currentUrl = new URL(controlView.webContents.getURL());
-
-        const sameHost = targetUrl.hostname === currentUrl.hostname;
-
-        if (sameHost) {
-            controlView.webContents.loadURL(url);
-            return {action: 'deny'};
-        }
-
-        return {action: 'allow'};
-    });
-
-    controlView.webContents.on('did-fail-load', getViewErrorHandler(controlView));
-
-    controlWindow.on('resize', () => {
-        const [controlWinWidth, controlWinHeight] = controlWindow.getContentSize();
-        controlView.setBounds({
-            x: 0,
-            y: 56,
-            width: controlWinWidth,
-            height: controlWinHeight - 355
-        });
-    })
-
-    controlWindow.on('close', () => {
-        const bounds = controlWindow.getBounds();
-
-        let settings = {
-            ...loadSettings(),
-            controlPanelX: bounds.x,
-            controlPanelY: bounds.y,
-            controlPanelMax: controlWindow.isMaximized()
-        };
-
-        if (!controlWindow.isMaximized()) {
-            settings = {
-                ...settings,
-                controlPanelWidth: bounds.width,
-                controlPanelHeight: bounds.height,
-            };
-        }
-
-        saveSettings(settings);
-    });
-
-    controlWindow.on('closed', () => {
-        if (displayWindow && !displayWindow.isDestroyed()) displayWindow.close();
-    });
-
-    ipcMain.on('show-context-menu', (event) => {
-        const template = [
-            {role: 'cut', label: 'Ausschneiden'},
-            {role: 'copy', label: 'Kopieren'},
-            {role: 'paste', label: 'Einfügen'},
-            {type: 'separator'},
-            {role: 'selectAll', label: 'Alles auswählen'}
-        ];
-
-        const menu = Menu.buildFromTemplate(template);
-        menu.popup(BrowserWindow.fromWebContents(event.sender));
-    });
-
-    app.whenReady().then(() => {
-        session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
+        defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
             try {
                 const viewIndex = findViewIndexByFrame(request);
                 if (viewIndex < 0) return callback({}); // keine Freigabe
@@ -423,8 +249,225 @@ app.whenReady().then(() => {
                 callback({}); // sicher verweigern
             }
         });
+
+        return enableAdblockForSession(session.defaultSession)
+    })
+    .then(async () => {
+        const {width, height} = screen.getPrimaryDisplay().bounds;
+
+        const savedSettings = loadSettings();
+
+        displayWindow = new BrowserWindow({
+            x: savedSettings.windowX ?? 0,
+            y: savedSettings.windowY ?? 0,
+            width: savedSettings.windowWidth ?? width,
+            height: savedSettings.windowHeight ?? height,
+            frame: false,
+            fullscreen: true,
+            backgroundColor: '#111',
+            webPreferences: {
+                contextIsolation: true
+            },
+            icon: path.join(__dirname, 'assets', 'icon.ico'),
+        });
+
+        displayWindow.setTitle(title);
+
+        displayWindow.on('close', () => {
+            const bounds = displayWindow.getBounds();
+            saveSettings({
+                ...loadSettings(), // merge with existing
+                windowX: bounds.x,
+                windowY: bounds.y,
+                windowWidth: bounds.width,
+                windowHeight: bounds.height,
+            });
+        });
+
+        const storedURLs = loadStoredURLs();
+
+        for (let i = 0; i < 4; i++) {
+            const view = new WebContentsView({webPreferences: {contextIsolation: true}});
+
+            views.push(view);
+            displayWindow.contentView.addChildView(view);
+
+            setDefaultViewSettings(view);
+
+            const url = (storedURLs.viewUrls || [])[i] || storedURLs[i] || 'https://picsum.photos/1920/1080';
+            view.webContents.loadURL(url);
+
+            function sendNavUpdate(index, inpage) {
+                const view = views[index];
+
+                // Clear duplicates from history
+                const history = view.webContents.navigationHistory;
+                const allEntries = history.getAllEntries();
+                const entriesToDelete = allEntries.filter((entry, index) => {
+                    return isErrorPage(entry.url) || (index > 0 && allEntries[index - 1].url === entry.url);
+                }).map(entry => allEntries.indexOf(entry)).sort().reverse();
+                entriesToDelete.forEach(entry => history.removeEntryAtIndex(entry));
+
+                if (view.injectedCssKey && !inpage) {
+                    injectForceVideoCss(view, view.injectedCssKey);
+                }
+
+
+                const wc = views[index].webContents;
+                let url = wc.getURL();
+                if (isErrorPage(wc.getURL())) {
+                    url = new URL(url).searchParams.get('url');
+                }
+
+                controlWindow.webContents.send('update-url', {
+                    index,
+                    url,
+                    canGoBack: wc.navigationHistory.canGoBack(),
+                    canGoForward: wc.navigationHistory.canGoForward()
+                });
+            }
+
+            view.webContents.on('did-navigate', (e) => sendNavUpdate(i));
+            view.webContents.on('did-navigate-in-page', (e) => sendNavUpdate(i, true));
+
+            view.webContents.setWindowOpenHandler(({url}) => {
+                const targetUrl = new URL(url);
+                const currentUrl = new URL(view.webContents.getURL());
+
+                const sameHost = targetUrl.hostname === currentUrl.hostname;
+
+                if (sameHost) {
+                    view.webContents.loadURL(url);
+                } else {
+                    console.warn('Blocked opening URL in new window', url);
+                }
+                return {action: 'deny'};
+            });
+        }
+
+        tickerView = new WebContentsView({
+            webPreferences: {
+                preload: path.join(__dirname, 'preload.js'),
+                contextIsolation: true,
+                nodeIntegration: false
+            }
+        });
+        tickerView.webContents.loadFile('ticker.html');
+        displayWindow.contentView.addChildView(tickerView);
+
+        layoutAllViews();
+
+        displayWindow.on('resize', () => {
+            if (fullscreenIndex === null) layoutAllViews();
+        });
+
+        displayWindow.on('closed', () => {
+            if (controlWindow && !controlWindow.isDestroyed()) controlWindow.close();
+        });
+
+        controlWindow = new BrowserWindow({
+            x: savedSettings.controlPanelX ?? null,
+            y: savedSettings.controlPanelY ?? null,
+            width: savedSettings.controlPanelWidth ?? 1280,
+            minWidth: 1168,
+            height: savedSettings.controlPanelHeight ?? 980,
+            minHeight: 400,
+            resizable: true,
+            webPreferences: {
+                preload: path.join(__dirname, 'preload.js'),
+                contextIsolation: true
+            },
+            icon: path.join(__dirname, 'assets', 'icon.ico'),
+        });
+
+        if (savedSettings.controlPanelMax) controlWindow.maximize();
+
+        controlWindow.setTitle('Control Panel - ' + title);
+
+        controlWindow.setMenuBarVisibility(false);
+        controlWindow.loadFile('control.html');
+
+        const controlView = new WebContentsView({webPreferences: {contextIsolation: true}});
+        views['control'] = controlView;
+        controlWindow.contentView.addChildView(controlView);
+        const url = storedURLs.controlUrl || 'https://picsum.photos/1920/1080';
+        controlView.webContents.loadURL(url);
+
+        const [controlWinWidth, controlWinHeight] = controlWindow.getContentSize();
+        controlView.setBounds({
+            x: 0,
+            y: 56,
+            width: controlWinWidth,
+            height: controlWinHeight - 329
+        });
+
+        controlView.webContents.on('did-navigate', () => sendNavUpdate('control'));
+        controlView.webContents.on('did-navigate-in-page', () => sendNavUpdate('control', true));
+
+        controlView.webContents.setWindowOpenHandler(({url}) => {
+            const targetUrl = new URL(url);
+            const currentUrl = new URL(controlView.webContents.getURL());
+
+            const sameHost = targetUrl.hostname === currentUrl.hostname;
+
+            if (sameHost) {
+                controlView.webContents.loadURL(url);
+                return {action: 'deny'};
+            }
+
+            return {action: 'allow'};
+        });
+
+        setDefaultViewSettings(controlView);
+
+        controlWindow.on('resize', () => {
+            const [controlWinWidth, controlWinHeight] = controlWindow.getContentSize();
+            controlView.setBounds({
+                x: 0,
+                y: 56,
+                width: controlWinWidth,
+                height: controlWinHeight - 355
+            });
+        })
+
+        controlWindow.on('close', () => {
+            const bounds = controlWindow.getBounds();
+
+            let settings = {
+                ...loadSettings(),
+                controlPanelX: bounds.x,
+                controlPanelY: bounds.y,
+                controlPanelMax: controlWindow.isMaximized()
+            };
+
+            if (!controlWindow.isMaximized()) {
+                settings = {
+                    ...settings,
+                    controlPanelWidth: bounds.width,
+                    controlPanelHeight: bounds.height,
+                };
+            }
+
+            saveSettings(settings);
+        });
+
+        controlWindow.on('closed', () => {
+            if (displayWindow && !displayWindow.isDestroyed()) displayWindow.close();
+        });
+
+        ipcMain.on('show-context-menu', (event) => {
+            const template = [
+                {role: 'cut', label: 'Ausschneiden'},
+                {role: 'copy', label: 'Kopieren'},
+                {role: 'paste', label: 'Einfügen'},
+                {type: 'separator'},
+                {role: 'selectAll', label: 'Alles auswählen'}
+            ];
+
+            const menu = Menu.buildFromTemplate(template);
+            menu.popup(BrowserWindow.fromWebContents(event.sender));
+        });
     });
-});
 
 ipcMain.on('navigate', (event, {index, url}) => {
     const view = views[index];

@@ -25,6 +25,9 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@ghostery/adblocker": "^2.11.3",
+    "@ghostery/adblocker-electron": "^2.11.3",
+    "cross-fetch": "^4.1.0"
   },
   "devDependencies": {
     "electron": "^37.2.5",
