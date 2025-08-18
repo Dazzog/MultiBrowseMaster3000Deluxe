@@ -6,12 +6,12 @@ grid layout and controlling them via a Control Panel in a separate window.
 ## Features
 
 - 4-Webview Grid: Display four websites simultaneously
-- Individual URL input per view with navigation, back/forward, and fullscreen toggle
-- Display selection: Move the window to a specific monitor with ease
+- Control panel: Intuitive interface with Material Icons and interactive controls
+- Individual URL input per view with navigation buttons, priority mode, and fullscreen toggle
 - Ticker text: Optional scrolling text in the screen center
 - Drag & Drop: Drop local files (e.g., HTML, images, videos, PDFs) directly into an input field
-- URL persistence: Remembers last-used URLs between sessions
-- Control panel: Intuitive interface with Material Icons and interactive controls
+- Screen sharing: Share any screen or window in one of the views
+- Ad blocker: Integration with [@ghostery/adblocker-electron](https://github.com/ghostery/adblocker)
 
 ## Installation
 
@@ -47,6 +47,7 @@ Generates a portable `.exe` file with custom icon.
 - `main.js` – Entry point of the Electron app.
 - `control.html` / `control.css` – Main UI for controlling the webviews.
 - `ticker.html` / `ticker.css` – Separate view for scrolling ticker text.
+- `error.html` / `error.css` – Error page template
 - `preload.js` – IPC bridge between Renderer and Main process.
 - `assets/` – Icons and build resources.
 

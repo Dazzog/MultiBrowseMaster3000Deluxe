@@ -1,4 +1,4 @@
-const {
+import {
     app,
     BrowserWindow,
     desktopCapturer,
@@ -8,14 +8,23 @@ const {
     session,
     webContents,
     WebContentsView
-} = require('electron');
-const path = require('path');
-const {ElectronBlocker} = require('@ghostery/adblocker-electron');
-const fetch = require('cross-fetch');
-const fs = require('fs');
+} from 'electron';
+import fetch from 'cross-fetch';
+import path from 'path';
+import url from 'url';
+import {ElectronBlocker} from '@ghostery/adblocker-electron';
 
+import * as appConfig from './config.js';
+
+/* CONSTS */
 const title = 'MultiBrowseMaster 3000 Deluxe';
 
+const CONTROL_VIEW_ID = 'control';
+
+const __filename = url.fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+/* APP VARIABLES */
 let displayWindow;
 let controlWindow;
 let views = [];
@@ -24,24 +33,6 @@ let priorityIndex = null;
 
 let tickerView = null;
 let tickerText = null;
-
-const urlsStoragePath = path.join(app.getPath('userData'), 'urls.json');
-const configPath = path.join(app.getPath('userData'), 'config.json');
-
-function loadStoredURLs() {
-    if (fs.existsSync(urlsStoragePath)) {
-        try {
-            return JSON.parse(fs.readFileSync(urlsStoragePath, 'utf-8'));
-        } catch {
-            return [];
-        }
-    }
-    return [];
-}
-
-function saveURLs(urlArray) {
-    fs.writeFileSync(urlsStoragePath, JSON.stringify(urlArray, null, 2), 'utf-8');
-}
 
 function layoutAllViews() {
     const [winWidth, winHeight] = displayWindow.getContentSize();
@@ -138,18 +129,6 @@ function processInput(input) {
     return `https://www.google.com/search?q=${encodedQuery}`;
 }
 
-function loadSettings() {
-    try {
-        return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    } catch (e) {
-        return {};
-    }
-}
-
-function saveSettings(data) {
-    fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
-}
-
 function findViewIndexByFrame(request) {
     for (let i = 0; i < views.length; i++) {
         if (views[i].webContents.mainFrame === request.frame) return i;
@@ -161,8 +140,6 @@ let blocker;
 
 async function getAdBlocker() {
     if (!blocker) {
-        // persistenter Cache beschleunigt den Start
-        const cachePath = path.join(app.getPath('userData'), 'adblocker.bin');
         blocker = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch);
         // Optionales Debug
         blocker.on('request-blocked', ({url}) => console.debug('[adblock] blocked:', url));
@@ -186,13 +163,15 @@ function isErrorPage(url) {
     }
 }
 
-const getViewErrorHandler = (view) => ((_e, errorCode, errorDesc, validatedURL, isMainFrame) => {
-    if (!isMainFrame || isErrorPage(view.webContents.getURL())) return;
-    // Eigene Fehlerseite laden und Infos übergeben
-    view.webContents.loadFile(path.join(__dirname, 'error.html'), {
-        query: {code: String(errorCode), desc: errorDesc, url: validatedURL}
+function getViewErrorHandler(view) {
+    return ((_e, errorCode, errorDesc, validatedURL, isMainFrame) => {
+        if (!isMainFrame || isErrorPage(view.webContents.getURL())) return;
+        // Eigene Fehlerseite laden und Infos übergeben
+        view.webContents.loadFile(path.join(__dirname, 'error.html'), {
+            query: {code: String(errorCode), desc: errorDesc, url: validatedURL}
+        });
     });
-});
+}
 
 function setDefaultViewSettings(view) {
     const wc = view.webContents;
@@ -211,6 +190,36 @@ function setDefaultViewSettings(view) {
             event.preventDefault()
         }
     })
+}
+
+function sendNavUpdate(index, inpage) {
+    const view = views[index];
+
+    // Clear duplicates from history
+    const history = view.webContents.navigationHistory;
+    const allEntries = history.getAllEntries();
+    const entriesToDelete = allEntries.filter((entry, index) => {
+        return isErrorPage(entry.url) || (index > 0 && allEntries[index - 1].url === entry.url);
+    }).map(entry => allEntries.indexOf(entry)).sort().reverse();
+    entriesToDelete.forEach(entry => history.removeEntryAtIndex(entry));
+
+    if (view.injectedCssKey && !inpage) {
+        injectForceVideoCss(view, view.injectedCssKey);
+    }
+
+
+    const wc = views[index].webContents;
+    let url = wc.getURL();
+    if (isErrorPage(wc.getURL())) {
+        url = new URL(url).searchParams.get('url');
+    }
+
+    controlWindow.webContents.send('update-url', {
+        index,
+        url,
+        canGoBack: wc.navigationHistory.canGoBack(),
+        canGoForward: wc.navigationHistory.canGoForward()
+    });
 }
 
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
@@ -268,13 +277,13 @@ app.whenReady()
     .then(async () => {
         const {width, height} = screen.getPrimaryDisplay().bounds;
 
-        const savedSettings = loadSettings();
+        const savedConfig = appConfig.loadAppConfig();
 
         displayWindow = new BrowserWindow({
-            x: savedSettings.windowX ?? 0,
-            y: savedSettings.windowY ?? 0,
-            width: savedSettings.windowWidth ?? width,
-            height: savedSettings.windowHeight ?? height,
+            x: savedConfig.windowX ?? 0,
+            y: savedConfig.windowY ?? 0,
+            width: savedConfig.windowWidth ?? width,
+            height: savedConfig.windowHeight ?? height,
             frame: false,
             fullscreen: true,
             backgroundColor: '#111',
@@ -288,8 +297,8 @@ app.whenReady()
 
         displayWindow.on('close', () => {
             const bounds = displayWindow.getBounds();
-            saveSettings({
-                ...loadSettings(), // merge with existing
+            appConfig.saveAppConfig({
+                ...appConfig.loadAppConfig(), // merge with existing
                 windowX: bounds.x,
                 windowY: bounds.y,
                 windowWidth: bounds.width,
@@ -297,7 +306,7 @@ app.whenReady()
             });
         });
 
-        const storedURLs = loadStoredURLs();
+        const storedURLs = appConfig.loadViewURLs();
 
         for (let i = 0; i < 4; i++) {
             const view = new WebContentsView({webPreferences: {contextIsolation: true}});
@@ -309,36 +318,6 @@ app.whenReady()
 
             const url = (storedURLs.viewUrls || [])[i] || storedURLs[i] || 'https://picsum.photos/1920/1080';
             view.webContents.loadURL(url);
-
-            function sendNavUpdate(index, inpage) {
-                const view = views[index];
-
-                // Clear duplicates from history
-                const history = view.webContents.navigationHistory;
-                const allEntries = history.getAllEntries();
-                const entriesToDelete = allEntries.filter((entry, index) => {
-                    return isErrorPage(entry.url) || (index > 0 && allEntries[index - 1].url === entry.url);
-                }).map(entry => allEntries.indexOf(entry)).sort().reverse();
-                entriesToDelete.forEach(entry => history.removeEntryAtIndex(entry));
-
-                if (view.injectedCssKey && !inpage) {
-                    injectForceVideoCss(view, view.injectedCssKey);
-                }
-
-
-                const wc = views[index].webContents;
-                let url = wc.getURL();
-                if (isErrorPage(wc.getURL())) {
-                    url = new URL(url).searchParams.get('url');
-                }
-
-                controlWindow.webContents.send('update-url', {
-                    index,
-                    url,
-                    canGoBack: wc.navigationHistory.canGoBack(),
-                    canGoForward: wc.navigationHistory.canGoForward()
-                });
-            }
 
             view.webContents.on('did-navigate', (e) => sendNavUpdate(i));
             view.webContents.on('did-navigate-in-page', (e) => sendNavUpdate(i, true));
@@ -379,11 +358,11 @@ app.whenReady()
         });
 
         controlWindow = new BrowserWindow({
-            x: savedSettings.controlPanelX ?? null,
-            y: savedSettings.controlPanelY ?? null,
-            width: savedSettings.controlPanelWidth ?? 1280,
+            x: savedConfig.controlPanelX ?? null,
+            y: savedConfig.controlPanelY ?? null,
+            width: savedConfig.controlPanelWidth ?? 1280,
             minWidth: 1168,
-            height: savedSettings.controlPanelHeight ?? 980,
+            height: savedConfig.controlPanelHeight ?? 980,
             minHeight: 400,
             resizable: true,
             webPreferences: {
@@ -393,7 +372,7 @@ app.whenReady()
             icon: path.join(__dirname, 'assets', 'icon.ico'),
         });
 
-        if (savedSettings.controlPanelMax) controlWindow.maximize();
+        if (savedConfig.controlPanelMax) controlWindow.maximize();
 
         controlWindow.setTitle('Control Panel - ' + title);
 
@@ -401,7 +380,7 @@ app.whenReady()
         controlWindow.loadFile('control.html');
 
         const controlView = new WebContentsView({webPreferences: {contextIsolation: true}});
-        views['control'] = controlView;
+        views[CONTROL_VIEW_ID] = controlView;
         controlWindow.contentView.addChildView(controlView);
         const url = storedURLs.controlUrl || 'https://picsum.photos/1920/1080';
         controlView.webContents.loadURL(url);
@@ -414,8 +393,8 @@ app.whenReady()
             height: controlWinHeight - 329
         });
 
-        controlView.webContents.on('did-navigate', () => sendNavUpdate('control'));
-        controlView.webContents.on('did-navigate-in-page', () => sendNavUpdate('control', true));
+        controlView.webContents.on('did-navigate', () => sendNavUpdate(CONTROL_VIEW_ID));
+        controlView.webContents.on('did-navigate-in-page', () => sendNavUpdate(CONTROL_VIEW_ID, true));
 
         controlView.webContents.setWindowOpenHandler(({url}) => {
             const targetUrl = new URL(url);
@@ -446,22 +425,22 @@ app.whenReady()
         controlWindow.on('close', () => {
             const bounds = controlWindow.getBounds();
 
-            let settings = {
-                ...loadSettings(),
+            let config = {
+                ...appConfig.loadAppConfig(),
                 controlPanelX: bounds.x,
                 controlPanelY: bounds.y,
                 controlPanelMax: controlWindow.isMaximized()
             };
 
             if (!controlWindow.isMaximized()) {
-                settings = {
-                    ...settings,
+                config = {
+                    ...config,
                     controlPanelWidth: bounds.width,
                     controlPanelHeight: bounds.height,
                 };
             }
 
-            saveSettings(settings);
+            appConfig.saveAppConfig(config);
         });
 
         controlWindow.on('closed', () => {
@@ -508,11 +487,11 @@ ipcMain.on('go-forward', (event, index) => {
 });
 
 ipcMain.on('save-urls', (event, urls) => {
-    saveURLs(urls);
+    appConfig.saveViewURLs(urls);
 });
 
 ipcMain.handle('load-urls', () => {
-    return loadStoredURLs();
+    return appConfig.loadViewURLs();
 });
 
 ipcMain.on('toggle-fullscreen', (event, index) => {
@@ -623,17 +602,17 @@ ipcMain.on('set-ticker-text', (event, text) => {
     tickerView.webContents.send('update-ticker-text', text);
     tickerText = text;
     layoutAllViews();
-    saveSettings({...loadSettings(), tickerText: text});
+    appConfig.saveAppConfig({...appConfig.loadAppConfig(), tickerText: text});
 });
 
 ipcMain.on('set-ticker-color', (event, color) => {
     tickerView.webContents.send('update-ticker-color', color);
-    saveSettings({...loadSettings(), tickerColor: color});
+    appConfig.saveAppConfig({...appConfig.loadAppConfig(), tickerColor: color});
 });
 
 ipcMain.on('set-ticker-background-color', (event, color) => {
     tickerView.webContents.send('update-ticker-background-color', color);
-    saveSettings({...loadSettings(), tickerBackgroundColor: color});
+    appConfig.saveAppConfig({...appConfig.loadAppConfig(), tickerBackgroundColor: color});
 });
 
 ipcMain.on('drop', (event, path) => {
@@ -641,7 +620,7 @@ ipcMain.on('drop', (event, path) => {
 });
 
 ipcMain.handle('load-ticker', () => {
-    const {tickerText, tickerColor, tickerBackgroundColor} = loadSettings();
+    const {tickerText, tickerColor, tickerBackgroundColor} = appConfig.loadAppConfig();
     return {tickerText, tickerColor, tickerBackgroundColor};
 });
 
@@ -661,7 +640,7 @@ const displayCaptureSelections = new Map();
 
 ipcMain.handle('set-display-capture-source', async (event, {viewIndex, sourceId, withAudio}) => {
     displayCaptureSelections.set(viewIndex, {sourceId, withAudio: !!withAudio});
-    views['control'].setVisible(true);
+    views[CONTROL_VIEW_ID].setVisible(true);
 });
 
 ipcMain.handle('get-capture-sources', async () => {
@@ -670,7 +649,7 @@ ipcMain.handle('get-capture-sources', async () => {
         fetchWindowIcons: true
     });
 
-    views['control'].setVisible(false);
+    views[CONTROL_VIEW_ID].setVisible(false);
 
     return sources.map(s => ({
         id: s.id, name: s.name,
@@ -681,7 +660,7 @@ ipcMain.handle('get-capture-sources', async () => {
 });
 
 ipcMain.handle('cancel-capture-sources-select', async () => {
-    views['control'].setVisible(true);
+    views[CONTROL_VIEW_ID].setVisible(true);
 });
 
 ipcMain.handle('start-display-capture', async (event, {viewIndex}) => {
