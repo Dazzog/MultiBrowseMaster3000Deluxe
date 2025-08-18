@@ -233,8 +233,17 @@ app.whenReady().then(() => {
         view.webContents.on('did-navigate-in-page', (e) => sendNavUpdate(i, true));
 
         view.webContents.setWindowOpenHandler(({url}) => {
-            view.webContents.loadURL(url); // in der aktuellen View laden
-            return {action: 'deny'};     // aber kein neues Fenster öffnen
+            const targetUrl = new URL(url);
+            const currentUrl = new URL(view.webContents.getURL());
+
+            const sameHost = targetUrl.hostname === currentUrl.hostname;
+
+            if (sameHost) {
+                view.webContents.loadURL(url);
+            } else {
+                console.warn('Blocked opening URL in new window', url);
+            }
+            return {action: 'deny'};
         });
     }
 
@@ -298,8 +307,17 @@ app.whenReady().then(() => {
     controlView.webContents.on('did-navigate-in-page', () => sendNavUpdate('control', true));
 
     controlView.webContents.setWindowOpenHandler(({url}) => {
-        controlView.webContents.loadURL(url);
-        return {action: 'deny'};
+        const targetUrl = new URL(url);
+        const currentUrl = new URL(controlView.webContents.getURL());
+
+        const sameHost = targetUrl.hostname === currentUrl.hostname;
+
+        if (sameHost) {
+            controlView.webContents.loadURL(url);
+            return {action: 'deny'};
+        }
+
+        return {action: 'allow'};
     });
 
     controlWindow.on('resize', () => {
