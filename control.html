@@ -70,6 +70,8 @@
 </div>
 
 <main>
+    <img alt="" id="previewcontrol"/>
+
     <div aria-label="Bildschirmquelle wählen" aria-modal="true" class="cap-modal cap-hidden" id="capModal"
          role="dialog">
         <div class="cap-box">
@@ -389,6 +391,7 @@
         for (let i = 0; i < 4; i++) {
             updatePreview(i);
         }
+        updatePreview('control');
     }, 4000);
 
     const capModal = document.getElementById('capModal');
