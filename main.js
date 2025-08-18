@@ -149,6 +149,16 @@ app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
 
+function isErrorPage(url) {
+    try {
+        const u = new URL(url);
+        // file://.../error.html überspringen
+        return u.protocol === 'file:' && u.pathname.endsWith('/error.html');
+    } catch {
+        return false;
+    }
+}
+
 app.whenReady().then(() => {
     const {width, height} = screen.getPrimaryDisplay().bounds;
 
@@ -183,24 +193,27 @@ app.whenReady().then(() => {
 
     const storedURLs = loadStoredURLs();
 
+    const getViewErrorHandler = (view) => ((_e, errorCode, errorDesc, validatedURL, isMainFrame) => {
+        if (!isMainFrame || isErrorPage(view.webContents.getURL())) return;
+        // Eigene Fehlerseite laden und Infos übergeben
+        view.webContents.loadFile(path.join(__dirname, 'error.html'), {
+            query: {code: String(errorCode), desc: errorDesc, url: validatedURL}
+        });
+    });
+
     for (let i = 0; i < 4; i++) {
         const view = new WebContentsView({webPreferences: {contextIsolation: true}});
 
         views.push(view);
         displayWindow.contentView.addChildView(view);
 
-        view.webContents.on('did-fail-load', (_e, errorCode, errorDesc, validatedURL, isMainFrame) => {
-            if (!isMainFrame) return;
-            // Eigene Fehlerseite laden und Infos übergeben
-            view.webContents.loadFile(path.join(__dirname, 'error.html'), {
-                query: {code: String(errorCode), desc: errorDesc, url: validatedURL}
-            });
-        });
+        view.webContents.on('did-fail-load', getViewErrorHandler(view));
 
         const ses = view.webContents.session;
         ses.webRequest.onCompleted({urls: ['*://*/*']}, (details) => {
             if (details.webContentsId !== view.webContents.id) return;
             if (details.resourceType !== 'mainFrame') return;
+            if (isErrorPage(details.url)) return;
 
             if (details.statusCode >= 400) {
                 view.webContents.loadFile(path.join(__dirname, 'error.html'), {
@@ -229,9 +242,14 @@ app.whenReady().then(() => {
 
 
             const wc = views[index].webContents;
+            let url = wc.getURL();
+            if (isErrorPage(wc.getURL())) {
+                url = new URL(url).searchParams.get('url');
+            }
+
             controlWindow.webContents.send('update-url', {
                 index,
-                url: wc.getURL(),
+                url,
                 canGoBack: wc.navigationHistory.canGoBack(),
                 canGoForward: wc.navigationHistory.canGoForward()
             });
@@ -328,6 +346,8 @@ app.whenReady().then(() => {
         return {action: 'allow'};
     });
 
+    controlView.webContents.on('did-fail-load', getViewErrorHandler(controlView));
+
     controlWindow.on('resize', () => {
         const [controlWinWidth, controlWinHeight] = controlWindow.getContentSize();
         controlView.setBounds({
@@ -416,7 +436,11 @@ ipcMain.on('navigate', (event, {index, url}) => {
 ipcMain.on('go-back', (event, index) => {
     const view = views[index];
     if (view && view.webContents.navigationHistory.canGoBack()) {
-        view.webContents.navigationHistory.goBack();
+        if (isErrorPage(view.webContents.getURL())) {
+            view.webContents.navigationHistory.goToOffset(-2);
+        } else {
+            view.webContents.navigationHistory.goBack();
+        }
     }
 });
 
