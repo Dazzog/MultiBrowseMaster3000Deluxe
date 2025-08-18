@@ -198,6 +198,19 @@ function setDefaultViewSettings(view) {
     const wc = view.webContents;
 
     wc.on('did-fail-load', getViewErrorHandler(view));
+
+    wc.on('before-input-event', (event, input) => {
+        if (input.type !== 'keyDown') return
+
+        const isCmdOrCtrl = input.control || input.meta
+        const isShift = input.shift
+
+        // F5
+        if (input.key === 'F5' || (isCmdOrCtrl && input.code === 'KeyR')) {
+            isShift ? wc.reloadIgnoringCache() : wc.reload()
+            event.preventDefault()
+        }
+    })
 }
 
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
