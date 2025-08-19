@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('api', {
     goForward: (index) => ipcRenderer.send('go-forward', index),
     onURLUpdate: (callback) => ipcRenderer.on('update-url', (event, data) => callback(data)),
     getDisplays: () => ipcRenderer.invoke('get-displays'),
+    onDisplayWindowPositionUpdate: (callback) => ipcRenderer.on('update-display-window-position', (event, data) => callback(data)),
     moveToDisplay: (index) => ipcRenderer.send('move-to-display', index),
     loadTicker: () => ipcRenderer.invoke('load-ticker'),
     setTickerText: (text) => ipcRenderer.send('set-ticker-text', text),

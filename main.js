@@ -265,6 +265,22 @@ function injectForceVideoCss(view, oldKey) {
     }
 }
 
+function updateDisplayWindowPosition() {
+    controlWindow.webContents.send('update-display-window-position', displayWindow.getBounds());
+}
+
+function getCaptureSourceName(s) {
+    let label = '';
+    if (s.display_id) {
+        const display = screen.getAllDisplays().find(entry => entry.id == s.display_id);
+        if (display) {
+            label = display.label;
+        }
+    }
+
+    return s.name + (label ? ': ' + label : '');
+}
+
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
@@ -502,6 +518,8 @@ app.whenReady()
                 }
             });
         });
+
+        setTimeout(() => updateDisplayWindowPosition(), 400);
     });
 
 /* Interface invents */
@@ -583,7 +601,8 @@ app.whenReady()
         return screen.getAllDisplays().map((d, i) => ({
             index: i,
             bounds: d.bounds,
-            id: d.id
+            id: d.id,
+            label: d.label,
         }));
     });
 
@@ -606,6 +625,8 @@ app.whenReady()
         });
 
         displayWindow.setFullScreen(true);
+
+        updateDisplayWindowPosition();
     });
 
     ipcMain.on('set-ticker-text', (event, text) => {
@@ -660,7 +681,8 @@ app.whenReady()
         views[CONTROL_VIEW_ID].setVisible(false);
 
         return sources.map(s => ({
-            id: s.id, name: s.name,
+            id: s.id,
+            name: getCaptureSourceName(s),
             display_id: s.display_id,
             iconDataUrl: s.appIcon?.toDataURL?.() ?? null,
             thumbDataUrl: s.thumbnail?.toDataURL?.() ?? null

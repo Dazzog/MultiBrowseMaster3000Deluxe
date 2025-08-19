@@ -9,6 +9,9 @@ const template = document.getElementById("control-template");
 const container = document.getElementById("viewContainer");
 const marker = document.getElementById("view-insertion-point");
 
+var displays;
+var viewWindowPosition;
+
 viewControlsConfigs.forEach(({index, label, icon, flip}) => {
     const clone = template.content.cloneNode(true);
     const cell = clone.querySelector(".cell");
@@ -120,6 +123,11 @@ window.api?.onURLUpdate(({index, url, canGoBack, canGoForward}) => {
     if (forwardBtn) forwardBtn.disabled = !canGoForward;
 });
 
+window.api?.onDisplayWindowPositionUpdate((data) => {
+    viewWindowPosition = data;
+    this.updateActiveDisplay();
+});
+
 function navigate(index) {
     const input = inputs[index];
     window.api?.navigate(index, input?.value || '');
@@ -193,16 +201,18 @@ function saveAllURLs() {
 
 async function populateDisplayList() {
     const select = document.getElementById('displaySelect');
-    const displays = await window.api?.getDisplays();
+    displays = await window.api?.getDisplays();
 
     select.innerHTML = ''; // leeren
     displays?.forEach(display => {
-        const {index, bounds} = display;
+        const {index, bounds, label} = display;
         const option = document.createElement('option');
         option.value = index;
-        option.text = `${index + 1}: ${bounds.width}×${bounds.height}`;
+        option.text = `Bildschirm ${index + 1}${label ? ': ' + label : ''} (${bounds.width}×${bounds.height})`;
         select.appendChild(option);
     });
+
+    updateActiveDisplay();
 }
 
 function changeDisplay() {
@@ -338,4 +348,31 @@ window.api?.onNotifyNewVersion((release) => {
 
 function closeMessage() {
     document.querySelector('.message')?.classList.add('hidden');
+}
+
+function updateActiveDisplay() {
+    if (viewWindowPosition && displays) {
+        let bestIndex = 0;
+        let bestDist = getDistance(viewWindowPosition, displays[bestIndex].bounds);
+
+        for (let i = 1; i < displays.length; i++) {
+            const dist = getDistance(viewWindowPosition, displays[i].bounds);
+            if (dist < bestDist) {
+                bestDist = dist;
+                bestIndex = i;
+            }
+        }
+
+        const select = document.getElementById('displaySelect');
+        select.value = bestIndex;
+    }
+}
+
+function getDistance(a, b) {
+    return (
+        Math.abs(a.x - b.x) +
+        Math.abs(a.y - b.y) +
+        Math.abs(a.width - b.width) +
+        Math.abs(a.height - b.height)
+    );
 }
