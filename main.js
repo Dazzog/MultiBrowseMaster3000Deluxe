@@ -420,7 +420,7 @@ app.whenReady()
             width: savedConfig.controlPanelWidth ?? 1280,
             minWidth: 1168,
             height: savedConfig.controlPanelHeight ?? 980,
-            minHeight: 400,
+            minHeight: 460,
             resizable: true,
             webPreferences: {
                 preload: path.join(__dirname, 'preload.js'),
