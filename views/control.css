@@ -286,3 +286,41 @@ main {
 .cap-btn:hover {
     background: #3a3a3a
 }
+
+.message {
+    position: fixed;
+    bottom: 8px;
+    right: 8px;
+    min-width: 10em;
+    max-width: 90vw;
+    max-height: 4em;
+    padding: 12px 48px 12px 12px;
+    background-color: #7B52AB;
+    box-shadow: 0 0 5px #000;
+    border-radius: 4px;
+    transition: bottom ease-in-out 800ms;
+
+    &.hidden {
+        transition: bottom ease-in-out 200ms;
+        bottom: -4em;
+    }
+
+    .cap-btn {
+        position: absolute;
+        right: 4px;
+        top: 8px;
+
+        padding: 2px;
+
+        .material-symbols-outlined {
+            font-size: 125%;
+        }
+    }
+
+    a {
+        color: inherit;
+        font-weight: bold;
+        text-underline-offset: 0.22em;
+        text-decoration-thickness: 2px;
+    }
+}

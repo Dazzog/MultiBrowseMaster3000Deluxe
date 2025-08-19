@@ -10,14 +10,17 @@ import {
     WebContentsView
 } from 'electron';
 import fetch from 'cross-fetch';
+import https from 'https';
 import path from 'path';
+import semver from 'semver';
 import url from 'url';
 import {ElectronBlocker} from '@ghostery/adblocker-electron';
 
 import * as appConfig from './config.js';
 
+
 /* CONSTS */
-const title = 'MultiBrowseMaster 3000 Deluxe';
+const title = 'MultiBrowseMaster 3000 Deluxe v' + app.getVersion();
 
 const CONTROL_VIEW_ID = 'control';
 
@@ -33,6 +36,8 @@ let priorityIndex = null;
 
 let tickerView = null;
 let tickerText = null;
+
+const displayCaptureSelections = new Map();
 
 function layoutAllViews() {
     const [winWidth, winHeight] = displayWindow.getContentSize();
@@ -163,13 +168,16 @@ function isErrorPage(url) {
     }
 }
 
+function loadErrorPage(wc, code, desc, url) {
+    wc.loadFile(path.join(__dirname, 'views', 'error.html'), {
+        query: {code: String(code), desc, url}
+    });
+}
+
 function getViewErrorHandler(view) {
     return ((_e, errorCode, errorDesc, validatedURL, isMainFrame) => {
         if (!isMainFrame || isErrorPage(view.webContents.getURL())) return;
-        // Eigene Fehlerseite laden und Infos übergeben
-        view.webContents.loadFile(path.join(__dirname, 'error.html'), {
-            query: {code: String(errorCode), desc: errorDesc, url: validatedURL}
-        });
+        loadErrorPage(view.webContents, errorCode, validatedURL, errorDesc);
     });
 }
 
@@ -222,6 +230,41 @@ function sendNavUpdate(index, inpage) {
     });
 }
 
+function injectForceVideoCss(view, oldKey) {
+    if (oldKey) {
+        view.webContents.removeInsertedCSS(oldKey).then(() => injectForceVideoCss(view));
+    } else {
+        view.webContents.insertCSS(
+            `
+            video {
+                position: fixed !important;
+                inset: 0 !important;
+                margin: 0 !important;
+                width: 100vw !important;
+                max-width: 100vw !important;
+                height: 100vh !important;
+                max-height: 100vh !important;
+                object-fit: contain !important;
+                z-index: 2147483647 !important;
+                background-color: #111 !important;
+            }
+            
+            * {
+              overflow: hidden !important;
+            }
+
+            :not(video) {
+              max-width: 0 !important;
+              max-height: 0 !important;
+              z-index: 0 !important;
+            }
+            `
+        ).then(key => {
+            view.injectedCssKey = key;
+        });
+    }
+}
+
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
@@ -239,9 +282,7 @@ app.whenReady()
             if (isErrorPage(details.url)) return;
 
             if (details.statusCode >= 400) {
-                wc.loadFile(path.join(__dirname, 'error.html'), {
-                    query: {code: String(details.statusCode), url: details.url}
-                });
+                loadErrorPage(wc, details.statusCode, details.url);
             }
         });
 
@@ -344,7 +385,7 @@ app.whenReady()
                 nodeIntegration: false
             }
         });
-        tickerView.webContents.loadFile('ticker.html');
+        tickerView.webContents.loadFile(path.join(__dirname, 'views', 'ticker.html'));
         displayWindow.contentView.addChildView(tickerView);
 
         layoutAllViews();
@@ -377,7 +418,7 @@ app.whenReady()
         controlWindow.setTitle('Control Panel - ' + title);
 
         controlWindow.setMenuBarVisibility(false);
-        controlWindow.loadFile('control.html');
+        controlWindow.loadFile(path.join(__dirname, 'views', 'control.html'));
 
         const controlView = new WebContentsView({webPreferences: {contextIsolation: true}});
         views[CONTROL_VIEW_ID] = controlView;
@@ -447,246 +488,227 @@ app.whenReady()
             if (displayWindow && !displayWindow.isDestroyed()) displayWindow.close();
         });
 
-        ipcMain.on('show-context-menu', (event) => {
-            const template = [
-                {role: 'cut', label: 'Ausschneiden'},
-                {role: 'copy', label: 'Kopieren'},
-                {role: 'paste', label: 'Einfügen'},
-                {type: 'separator'},
-                {role: 'selectAll', label: 'Alles auswählen'}
-            ];
+        https.get("https://api.github.com/repos/Dazzog/MultiBrowseMaster3000Deluxe/releases/latest", {
+            headers: {'User-Agent': 'electron-app'}
+        }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                const release = JSON.parse(data);
+                const latestVersion = release.tag_name.replace(/^v/, ''); // z. B. "v1.3.0" → "1.3.0"
 
-            const menu = Menu.buildFromTemplate(template);
-            menu.popup(BrowserWindow.fromWebContents(event.sender));
+                if (semver.lt(app.getVersion(), latestVersion)) {
+                    controlWindow.webContents.send('notify-new-version', release);
+                }
+            });
         });
     });
 
-ipcMain.on('navigate', (event, {index, url}) => {
-    const view = views[index];
-    if (view) {
-        view.webContents.loadURL(processInput(url));
-    }
-});
-
-ipcMain.on('go-back', (event, index) => {
-    const view = views[index];
-    if (view && view.webContents.navigationHistory.canGoBack()) {
-        if (isErrorPage(view.webContents.getURL())) {
-            view.webContents.navigationHistory.goToOffset(-2);
-        } else {
-            view.webContents.navigationHistory.goBack();
+/* Interface invents */
+{
+    ipcMain.on('navigate', (event, {index, url}) => {
+        const view = views[index];
+        if (view) {
+            view.webContents.loadURL(processInput(url));
         }
-    }
-});
+    });
 
-ipcMain.on('go-forward', (event, index) => {
-    const view = views[index];
-    if (view && view.webContents.navigationHistory.canGoForward()) {
-        view.webContents.navigationHistory.goForward();
-    }
-});
-
-ipcMain.on('save-urls', (event, urls) => {
-    appConfig.saveViewURLs(urls);
-});
-
-ipcMain.handle('load-urls', () => {
-    return appConfig.loadViewURLs();
-});
-
-ipcMain.on('toggle-fullscreen', (event, index) => {
-    const [width, height] = displayWindow.getContentSize();
-
-    if (fullscreenIndex === index) {
-        fullscreenIndex = null;
-        layoutAllViews();
-    } else {
-        fullscreenIndex = index;
-        for (let i = 0; i < views.length; i++) {
-            if (i === index) {
-                views[i].setBounds({x: 0, y: 0, width, height});
+    ipcMain.on('go-back', (event, index) => {
+        const view = views[index];
+        if (view && view.webContents.navigationHistory.canGoBack()) {
+            if (isErrorPage(view.webContents.getURL())) {
+                view.webContents.navigationHistory.goToOffset(-2);
             } else {
-                views[i].setBounds({x: 0, y: 0, width: 0, height: 0});
+                view.webContents.navigationHistory.goBack();
             }
         }
-    }
-});
+    });
 
-function injectForceVideoCss(view, oldKey) {
-    if (oldKey) {
-        view.webContents.removeInsertedCSS(oldKey).then(() => injectForceVideoCss(view));
-    } else {
-        view.webContents.insertCSS(
-            `
-            video {
-                position: fixed !important;
-                inset: 0 !important;
-                margin: 0 !important;
-                width: 100vw !important;
-                max-width: 100vw !important;
-                height: 100vh !important;
-                max-height: 100vh !important;
-                object-fit: contain !important;
-                z-index: 2147483647 !important;
-                background-color: #111 !important;
-            }
-            
-            * {
-              overflow: hidden !important;
-            }
+    ipcMain.on('go-forward', (event, index) => {
+        const view = views[index];
+        if (view && view.webContents.navigationHistory.canGoForward()) {
+            view.webContents.navigationHistory.goForward();
+        }
+    });
 
-            :not(video) {
-              max-width: 0 !important;
-              max-height: 0 !important;
-              z-index: 0 !important;
+    ipcMain.on('save-urls', (event, urls) => {
+        appConfig.saveViewURLs(urls);
+    });
+
+    ipcMain.handle('load-urls', () => {
+        return appConfig.loadViewURLs();
+    });
+
+    ipcMain.on('toggle-fullscreen', (event, index) => {
+        const [width, height] = displayWindow.getContentSize();
+
+        if (fullscreenIndex === index) {
+            fullscreenIndex = null;
+            layoutAllViews();
+        } else {
+            fullscreenIndex = index;
+            for (let i = 0; i < views.length; i++) {
+                if (i === index) {
+                    views[i].setBounds({x: 0, y: 0, width, height});
+                } else {
+                    views[i].setBounds({x: 0, y: 0, width: 0, height: 0});
+                }
             }
-            `
-        ).then(key => {
-            view.injectedCssKey = key;
+        }
+    });
+
+    ipcMain.on('toggle-force-video', (event, index) => {
+        const view = views[index];
+
+        if (!view.injectedCssKey) {
+            injectForceVideoCss(view);
+        } else {
+            view.webContents.removeInsertedCSS(view.injectedCssKey).then(() => {
+                view.injectedCssKey = null;
+            })
+        }
+    });
+
+    ipcMain.on('toggle-priority', (event, index) => {
+        if (priorityIndex == index) {
+            priorityIndex = null;
+        } else {
+            priorityIndex = index;
+        }
+
+        layoutAllViews();
+    });
+
+    ipcMain.handle('get-displays', () => {
+        return screen.getAllDisplays().map((d, i) => ({
+            index: i,
+            bounds: d.bounds,
+            id: d.id
+        }));
+    });
+
+    ipcMain.on('move-to-display', (event, targetIndex) => {
+        const displays = screen.getAllDisplays();
+
+        if (targetIndex < 0 || targetIndex >= displays.length) {
+            console.warn(`Display index ${targetIndex} is out of bounds.`);
+            return;
+        }
+
+        const targetDisplay = displays[targetIndex];
+        const bounds = targetDisplay.bounds;
+
+        displayWindow.setBounds({
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height
         });
-    }
+
+        displayWindow.setFullScreen(true);
+    });
+
+    ipcMain.on('set-ticker-text', (event, text) => {
+        tickerView.webContents.send('update-ticker-text', text);
+        tickerText = text;
+        layoutAllViews();
+        appConfig.saveAppConfig({...appConfig.loadAppConfig(), tickerText: text});
+    });
+
+    ipcMain.on('set-ticker-color', (event, color) => {
+        tickerView.webContents.send('update-ticker-color', color);
+        appConfig.saveAppConfig({...appConfig.loadAppConfig(), tickerColor: color});
+    });
+
+    ipcMain.on('set-ticker-background-color', (event, color) => {
+        tickerView.webContents.send('update-ticker-background-color', color);
+        appConfig.saveAppConfig({...appConfig.loadAppConfig(), tickerBackgroundColor: color});
+    });
+
+    ipcMain.on('drop', (event, path) => {
+        event.sender.send('drop-reply', path);
+    });
+
+    ipcMain.handle('load-ticker', () => {
+        const {tickerText, tickerColor, tickerBackgroundColor} = appConfig.loadAppConfig();
+        return {tickerText, tickerColor, tickerBackgroundColor};
+    });
+
+    ipcMain.handle('get-screenshot', async (event, index) => {
+        if (views) {
+            const targetView = views[index];
+
+            if (targetView?.webContents) {
+
+                const image = await targetView.webContents.capturePage();
+                return image.toDataURL();
+            }
+        }
+    });
+
+    ipcMain.handle('set-display-capture-source', async (event, {viewIndex, sourceId, withAudio}) => {
+        displayCaptureSelections.set(viewIndex, {sourceId, withAudio: !!withAudio});
+        views[CONTROL_VIEW_ID].setVisible(true);
+    });
+
+    ipcMain.handle('get-capture-sources', async () => {
+        const sources = await desktopCapturer.getSources({
+            types: ['screen', 'window'],
+            fetchWindowIcons: true
+        });
+
+        views[CONTROL_VIEW_ID].setVisible(false);
+
+        return sources.map(s => ({
+            id: s.id, name: s.name,
+            display_id: s.display_id,
+            iconDataUrl: s.appIcon?.toDataURL?.() ?? null,
+            thumbDataUrl: s.thumbnail?.toDataURL?.() ?? null
+        }));
+    });
+
+    ipcMain.handle('cancel-capture-sources-select', async () => {
+        views[CONTROL_VIEW_ID].setVisible(true);
+    });
+
+    ipcMain.handle('start-display-capture', async (event, {viewIndex}) => {
+        const view = views[viewIndex];
+        if (!view) return;
+
+        // lokale Seite laden oder injizieren – hier: injizieren
+        await view.webContents.executeJavaScript(`
+            (async () => {
+              try {
+                // Nutzer-Gesture simuliert ihr via Button im Control; hier wird nur gestartet
+                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+                let video = document.getElementById('___cap___');
+                if (!video) {
+                  video = document.createElement('video');
+                  video.id = '___cap___';
+                  video.autoplay = true;
+                  video.playsInline = true;
+                  video.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;object-fit:contain;background:#000;z-index:2147483647';
+                  document.body.innerHTML = ''; // View komplett für Stream verwenden
+                  document.body.appendChild(video);
+                }
+                video.srcObject = stream;
+              } catch (e) {
+                console.error('getDisplayMedia failed', e);
+              }
+            })();
+        `);
+    });
+
+    ipcMain.on('show-context-menu', (event) => {
+        const template = [
+            {role: 'cut', label: 'Ausschneiden'},
+            {role: 'copy', label: 'Kopieren'},
+            {role: 'paste', label: 'Einfügen'},
+            {type: 'separator'},
+            {role: 'selectAll', label: 'Alles auswählen'}
+        ];
+
+        const menu = Menu.buildFromTemplate(template);
+        menu.popup(BrowserWindow.fromWebContents(event.sender));
+    });
 }
-
-ipcMain.on('toggle-force-video', (event, index) => {
-    const view = views[index];
-
-    if (!view.injectedCssKey) {
-        injectForceVideoCss(view);
-    } else {
-        view.webContents.removeInsertedCSS(view.injectedCssKey).then(() => {
-            view.injectedCssKey = null;
-        })
-    }
-});
-
-ipcMain.on('toggle-priority', (event, index) => {
-    if (priorityIndex == index) {
-        priorityIndex = null;
-    } else {
-        priorityIndex = index;
-    }
-
-    layoutAllViews();
-});
-
-ipcMain.handle('get-displays', () => {
-    return screen.getAllDisplays().map((d, i) => ({
-        index: i,
-        bounds: d.bounds,
-        id: d.id
-    }));
-});
-
-ipcMain.on('move-to-display', (event, targetIndex) => {
-    const displays = screen.getAllDisplays();
-
-    if (targetIndex < 0 || targetIndex >= displays.length) {
-        console.warn(`Display index ${targetIndex} is out of bounds.`);
-        return;
-    }
-
-    const targetDisplay = displays[targetIndex];
-    const bounds = targetDisplay.bounds;
-
-    displayWindow.setBounds({
-        x: bounds.x,
-        y: bounds.y,
-        width: bounds.width,
-        height: bounds.height
-    });
-
-    displayWindow.setFullScreen(true);
-});
-
-ipcMain.on('set-ticker-text', (event, text) => {
-    tickerView.webContents.send('update-ticker-text', text);
-    tickerText = text;
-    layoutAllViews();
-    appConfig.saveAppConfig({...appConfig.loadAppConfig(), tickerText: text});
-});
-
-ipcMain.on('set-ticker-color', (event, color) => {
-    tickerView.webContents.send('update-ticker-color', color);
-    appConfig.saveAppConfig({...appConfig.loadAppConfig(), tickerColor: color});
-});
-
-ipcMain.on('set-ticker-background-color', (event, color) => {
-    tickerView.webContents.send('update-ticker-background-color', color);
-    appConfig.saveAppConfig({...appConfig.loadAppConfig(), tickerBackgroundColor: color});
-});
-
-ipcMain.on('drop', (event, path) => {
-    event.sender.send('drop-reply', path);
-});
-
-ipcMain.handle('load-ticker', () => {
-    const {tickerText, tickerColor, tickerBackgroundColor} = appConfig.loadAppConfig();
-    return {tickerText, tickerColor, tickerBackgroundColor};
-});
-
-ipcMain.handle('get-screenshot', async (event, index) => {
-    if (views) {
-        const targetView = views[index];
-
-        if (targetView?.webContents) {
-
-            const image = await targetView.webContents.capturePage();
-            return image.toDataURL();
-        }
-    }
-});
-
-const displayCaptureSelections = new Map();
-
-ipcMain.handle('set-display-capture-source', async (event, {viewIndex, sourceId, withAudio}) => {
-    displayCaptureSelections.set(viewIndex, {sourceId, withAudio: !!withAudio});
-    views[CONTROL_VIEW_ID].setVisible(true);
-});
-
-ipcMain.handle('get-capture-sources', async () => {
-    const sources = await desktopCapturer.getSources({
-        types: ['screen', 'window'],
-        fetchWindowIcons: true
-    });
-
-    views[CONTROL_VIEW_ID].setVisible(false);
-
-    return sources.map(s => ({
-        id: s.id, name: s.name,
-        display_id: s.display_id,
-        iconDataUrl: s.appIcon?.toDataURL?.() ?? null,
-        thumbDataUrl: s.thumbnail?.toDataURL?.() ?? null
-    }));
-});
-
-ipcMain.handle('cancel-capture-sources-select', async () => {
-    views[CONTROL_VIEW_ID].setVisible(true);
-});
-
-ipcMain.handle('start-display-capture', async (event, {viewIndex}) => {
-    const view = views[viewIndex];
-    if (!view) return;
-
-    // lokale Seite laden oder injizieren – hier: injizieren
-    await view.webContents.executeJavaScript(`
-    (async () => {
-      try {
-        // Nutzer-Gesture simuliert ihr via Button im Control; hier wird nur gestartet
-        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-        let video = document.getElementById('___cap___');
-        if (!video) {
-          video = document.createElement('video');
-          video.id = '___cap___';
-          video.autoplay = true;
-          video.playsInline = true;
-          video.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;object-fit:contain;background:#000;z-index:2147483647';
-          document.body.innerHTML = ''; // View komplett für Stream verwenden
-          document.body.appendChild(video);
-        }
-        video.srcObject = stream;
-      } catch (e) {
-        console.error('getDisplayMedia failed', e);
-      }
-    })();
-  `);
-});

@@ -27,7 +27,8 @@
   "dependencies": {
     "@ghostery/adblocker": "^2.11.3",
     "@ghostery/adblocker-electron": "^2.11.3",
-    "cross-fetch": "^4.1.0"
+    "cross-fetch": "^4.1.0",
+    "semver": "^7.7.2"
   },
   "devDependencies": {
     "electron": "^37.2.5",
