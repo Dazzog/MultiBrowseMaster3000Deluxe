@@ -2,7 +2,6 @@ const {contextBridge, ipcRenderer, webUtils} = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
     navigate: (index, url) => ipcRenderer.send('navigate', {index, url}),
-    saveURLs: (viewUrls, controlUrl) => ipcRenderer.send('save-urls', {viewUrls, controlUrl}),
     requestStoredURLs: () => ipcRenderer.invoke('load-urls'),
     toggleFullscreen: (index) => ipcRenderer.send('toggle-fullscreen', index),
     togglePriority: (index) => ipcRenderer.send('toggle-priority', index),
@@ -31,6 +30,11 @@ contextBridge.exposeInMainWorld('api', {
     toggleForceVideo: (index) => ipcRenderer.send('toggle-force-video', index),
     onNotifyNewVersion: (callback) => ipcRenderer.on('notify-new-version', (event, data) => callback(data)),
     onDisplayWindowKeyDown: (callback) => ipcRenderer.on('display-window-key-down', (event, key, shift, control) => callback(key, shift, control)),
+    onControlViewsUpdate: (callback) => ipcRenderer.on('update-control-views', (event, data) => callback(data)),
+    setActiveTab: (index) => ipcRenderer.send('set-active-tab', index),
+    closeTab: (index) => ipcRenderer.send('close-tab', index),
+    openTab: () => ipcRenderer.send('open-tab'),
+    toggleMuteTab: (index) => ipcRenderer.send('toggle-mute-tab', index),
 });
 
 window.addEventListener('contextmenu', (event) => {

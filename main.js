@@ -23,16 +23,21 @@ import * as appConfig from './config.js';
 const title = 'MultiBrowseMaster 3000 Deluxe v' + app.getVersion();
 
 const CONTROL_VIEW_ID = 'control';
+const DEFAULT_VIEW_URL = 'https://picsum.photos/1920/1080';
+const DEFAULT_BLANK_URL = 'about:blank';
 
 const __filename = url.fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /* APP VARIABLES */
 let displayWindow;
-let controlWindow;
 let views = [];
 let fullscreenIndex = null;
 let priorityIndex = null;
+
+let controlWindow;
+let controlViews = [];
+let activeControlViewIndex = 0;
 
 let tickerView = null;
 let tickerText = null;
@@ -109,7 +114,7 @@ function processInput(input) {
 
     // Gib bei leerem Input sofort Standardseite zurück
     if (!input) {
-        return 'https://picsum.photos/1920/1080';
+        return DEFAULT_BLANK_URL;
     }
 
     // Regex für vollständige URLs mit Protokoll
@@ -147,8 +152,8 @@ async function getAdBlocker() {
     if (!blocker) {
         blocker = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch);
         // Optionales Debug
-        blocker.on('request-blocked', ({url}) => console.debug('[adblock] blocked:', url));
-        blocker.on('request-redirected', ({url}) => console.debug('[adblock] redirected:', url));
+        //blocker.on('request-blocked', ({url}) => console.debug('[adblock] blocked:', url));
+        //blocker.on('request-redirected', ({url}) => console.debug('[adblock] redirected:', url));
     }
     return blocker;
 }
@@ -254,33 +259,45 @@ function setDefaultViewSettings(wc) {
 }
 
 function sendNavUpdate(index, inpage) {
-    const view = views[index];
+    let view = getTargetView(index);
 
-    // Clear duplicates from history
-    const history = view.webContents.navigationHistory;
-    const allEntries = history.getAllEntries();
-    const entriesToDelete = allEntries.filter((entry, index) => {
-        return isErrorPage(entry.url) || (index > 0 && allEntries[index - 1].url === entry.url);
-    }).map(entry => allEntries.indexOf(entry)).sort().reverse();
-    entriesToDelete.forEach(entry => history.removeEntryAtIndex(entry));
+    if (view) {
+        // Clear duplicates from history
+        const history = view.webContents.navigationHistory;
+        const allEntries = history.getAllEntries();
+        const entriesToDelete = allEntries.filter((entry, index) => {
+            return isErrorPage(entry.url) || (index > 0 && allEntries[index - 1].url === entry.url);
+        }).map(entry => allEntries.indexOf(entry)).sort().reverse();
+        entriesToDelete.forEach(entry => history.removeEntryAtIndex(entry));
 
-    if (view.injectedCssKey && !inpage) {
-        injectForceVideoCss(view, view.injectedCssKey);
+        if (view.injectedCssKey && !inpage) {
+            injectForceVideoCss(view, view.injectedCssKey);
+        }
+
+        const wc = view.webContents;
+        let url = wc.getURL();
+        if (isErrorPage(wc.getURL())) {
+            url = new URL(url).searchParams.get('url');
+        }
+
+        controlWindow.webContents.send('update-url', {
+            index,
+            url,
+            canGoBack: wc.navigationHistory.canGoBack(),
+            canGoForward: wc.navigationHistory.canGoForward()
+        });
+
+        saveViewURLs();
     }
+}
 
-
-    const wc = views[index].webContents;
-    let url = wc.getURL();
-    if (isErrorPage(wc.getURL())) {
-        url = new URL(url).searchParams.get('url');
+function saveViewURLs() {
+    if (views && controlViews) {
+        appConfig.saveViewURLs({
+            viewUrls: views.map((view) => view.webContents.getURL()),
+            controlUrls: controlViews.map((view) => view.webContents.getURL()),
+        });
     }
-
-    controlWindow.webContents.send('update-url', {
-        index,
-        url,
-        canGoBack: wc.navigationHistory.canGoBack(),
-        canGoForward: wc.navigationHistory.canGoForward()
-    });
 }
 
 function injectForceVideoCss(view, oldKey) {
@@ -332,6 +349,93 @@ function getCaptureSourceName(s) {
     }
 
     return s.name + (label ? ': ' + label : '');
+}
+
+function addControlView(url, active) {
+    const controlView = new WebContentsView({webPreferences: {contextIsolation: true}});
+    controlViews.push(controlView);
+
+    const activeView = controlViews[activeControlViewIndex];
+    controlView.webContents.setAudioMuted(activeView ? activeView.webContents.isAudioMuted() : false);
+
+    controlWindow.contentView.addChildView(controlView);
+
+    if (active) {
+        controlViews.forEach(view => view.setVisible(false));
+        controlView.setVisible(true);
+        activeControlViewIndex = controlViews.indexOf(controlView);
+    } else {
+        controlView.setVisible(false);
+    }
+
+    controlView.webContents.on('did-navigate', () => sendNavUpdate(CONTROL_VIEW_ID));
+    controlView.webContents.on('did-navigate-in-page', () => sendNavUpdate(CONTROL_VIEW_ID, true));
+
+    controlView.webContents.setWindowOpenHandler(({url}) => {
+        addControlView(url, true);
+        return {action: 'deny'};
+    });
+
+    setDefaultViewSettings(controlView.webContents);
+
+    updateControlViews();
+
+    controlView.webContents.loadURL(url || DEFAULT_BLANK_URL).then(() => {
+        updateControlViews();
+
+        controlView.webContents.on('did-navigate', () => {
+            controlView.favicon = null;
+            setTimeout(() => updateControlViews(), 100);
+        });
+
+        controlView.webContents.on('did-navigate-in-page', () => {
+            setTimeout(() => updateControlViews(), 100);
+        });
+
+        controlView.webContents.on('page-favicon-updated', (event, favicons) => {
+            controlView.favicon = favicons[0];
+            setTimeout(() => updateControlViews(), 100);
+        });
+
+        controlView.webContents.on('page-title-updated', () => {
+            setTimeout(() => updateControlViews(), 100);
+        });
+    });
+}
+
+function updateControlViews() {
+    resizeAllControlViews();
+
+    controlViews.forEach((view, index) => {
+        view.setVisible(index === activeControlViewIndex);
+    })
+
+    controlWindow.webContents.send('update-control-views', {
+        titles: controlViews.map(view => view.webContents.getTitle()),
+        favicons: controlViews.map(view => view.favicon),
+        muted: controlViews.map(view => view.webContents.isAudioMuted()),
+        index: activeControlViewIndex,
+    });
+
+    sendNavUpdate(CONTROL_VIEW_ID);
+}
+
+function getTargetView(index) {
+    if (index === 'control' && controlViews) {
+        return controlViews[activeControlViewIndex];
+    } else if (views) {
+        return views[index];
+    }
+}
+
+function resizeAllControlViews() {
+    const [controlWinWidth, controlWinHeight] = controlWindow.getContentSize();
+    controlViews.forEach((view) => view.setBounds({
+        x: 0,
+        y: 86,
+        width: controlWinWidth,
+        height: controlWinHeight - 385
+    }));
 }
 
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
@@ -428,7 +532,7 @@ app.whenReady()
 
             setDefaultViewSettings(view.webContents);
 
-            const url = (storedURLs.viewUrls || [])[i] || storedURLs[i] || 'https://picsum.photos/1920/1080';
+            const url = (storedURLs.viewUrls || [])[i] || storedURLs[i] || DEFAULT_VIEW_URL;
             view.webContents.loadURL(url);
 
             view.webContents.on('did-navigate', (e) => sendNavUpdate(i));
@@ -473,10 +577,10 @@ app.whenReady()
         controlWindow = new BrowserWindow({
             x: savedConfig.controlPanelX ?? null,
             y: savedConfig.controlPanelY ?? null,
-            width: savedConfig.controlPanelWidth ?? 1280,
-            minWidth: 1168,
+            width: savedConfig.controlPanelWidth ?? 1320,
+            minWidth: 1150,
             height: savedConfig.controlPanelHeight ?? 980,
-            minHeight: 460,
+            minHeight: 512,
             resizable: true,
             webPreferences: {
                 preload: path.join(__dirname, 'preload.js'),
@@ -492,49 +596,18 @@ app.whenReady()
         controlWindow.setMenuBarVisibility(false);
         controlWindow.loadFile(path.join(__dirname, 'views', 'control.html'));
 
-        const controlView = new WebContentsView({webPreferences: {contextIsolation: true}});
-        views[CONTROL_VIEW_ID] = controlView;
-        controlWindow.contentView.addChildView(controlView);
-        const url = storedURLs.controlUrl || 'https://picsum.photos/1920/1080';
-        controlView.webContents.loadURL(url);
+        // TODO: Load all Control Views
 
-        const [controlWinWidth, controlWinHeight] = controlWindow.getContentSize();
-        controlView.setBounds({
-            x: 0,
-            y: 56,
-            width: controlWinWidth,
-            height: controlWinHeight - 329
+        const controlUrls = storedURLs.controlUrls || (storedURLs.controlUrl ? [storedURLs.controlUrl] : null) || ['https://picsum.photos/1920/1080'];
+
+        controlUrls.forEach((url, index) => {
+            addControlView(url, index === 0);
         });
 
-        controlView.webContents.on('did-navigate', () => sendNavUpdate(CONTROL_VIEW_ID));
-        controlView.webContents.on('did-navigate-in-page', () => sendNavUpdate(CONTROL_VIEW_ID, true));
-
-        controlView.webContents.setWindowOpenHandler(({url}) => {
-            const targetUrl = new URL(url);
-            const currentUrl = new URL(controlView.webContents.getURL());
-
-            const sameHost = targetUrl.hostname === currentUrl.hostname;
-
-            if (sameHost) {
-                controlView.webContents.loadURL(url);
-                return {action: 'deny'};
-            }
-
-            return {action: 'allow'};
-        });
-
-        setDefaultViewSettings(controlView.webContents);
         setDefaultViewSettings(controlWindow.webContents);
 
-        controlWindow.on('resize', () => {
-            const [controlWinWidth, controlWinHeight] = controlWindow.getContentSize();
-            controlView.setBounds({
-                x: 0,
-                y: 56,
-                width: controlWinWidth,
-                height: controlWinHeight - 355
-            });
-        })
+        setTimeout(() => resizeAllControlViews(), 100);
+        controlWindow.on('resize', () => resizeAllControlViews())
 
         controlWindow.on('close', () => {
             const bounds = controlWindow.getBounds();
@@ -582,14 +655,15 @@ app.whenReady()
 /* Interface invents */
 {
     ipcMain.on('navigate', (event, {index, url}) => {
-        const view = views[index];
+        const view = getTargetView(index);
+
         if (view) {
             view.webContents.loadURL(processInput(url));
         }
     });
 
     ipcMain.on('go-back', (event, index) => {
-        const view = views[index];
+        const view = getTargetView(index);
         if (view && view.webContents.navigationHistory.canGoBack()) {
             if (isErrorPage(view.webContents.getURL())) {
                 view.webContents.navigationHistory.goToOffset(-2);
@@ -600,14 +674,10 @@ app.whenReady()
     });
 
     ipcMain.on('go-forward', (event, index) => {
-        const view = views[index];
+        const view = getTargetView(index);
         if (view && view.webContents.navigationHistory.canGoForward()) {
             view.webContents.navigationHistory.goForward();
         }
-    });
-
-    ipcMain.on('save-urls', (event, urls) => {
-        appConfig.saveViewURLs(urls);
     });
 
     ipcMain.handle('load-urls', () => {
@@ -714,20 +784,18 @@ app.whenReady()
     });
 
     ipcMain.handle('get-screenshot', async (event, index) => {
-        if (views) {
-            const targetView = views[index];
+        const view = getTargetView(index);
 
-            if (targetView?.webContents) {
+        if (view?.webContents) {
 
-                const image = await targetView.webContents.capturePage();
-                return image.toDataURL();
-            }
+            const image = await view.webContents.capturePage();
+            return image.toDataURL();
         }
     });
 
     ipcMain.handle('set-display-capture-source', async (event, {viewIndex, sourceId, withAudio}) => {
         displayCaptureSelections.set(viewIndex, {sourceId, withAudio: !!withAudio});
-        views[CONTROL_VIEW_ID].setVisible(true);
+        controlViews[activeControlViewIndex].setVisible(true);
     });
 
     ipcMain.handle('get-capture-sources', async () => {
@@ -736,7 +804,7 @@ app.whenReady()
             fetchWindowIcons: true
         });
 
-        views[CONTROL_VIEW_ID].setVisible(false);
+        controlViews[activeControlViewIndex].setVisible(false);
 
         return sources.map(s => ({
             id: s.id,
@@ -748,11 +816,11 @@ app.whenReady()
     });
 
     ipcMain.handle('cancel-capture-sources-select', async () => {
-        views[CONTROL_VIEW_ID].setVisible(true);
+        controlViews[activeControlViewIndex].setVisible(true);
     });
 
-    ipcMain.handle('start-display-capture', async (event, {viewIndex}) => {
-        const view = views[viewIndex];
+    ipcMain.handle('start-display-capture', async (event, {viewIndex: index}) => {
+        const view = views[index];
         if (!view) return;
 
         // lokale Seite laden oder injizieren – hier: injizieren
@@ -790,5 +858,46 @@ app.whenReady()
 
         const menu = Menu.buildFromTemplate(template);
         menu.popup(BrowserWindow.fromWebContents(event.sender));
+    });
+
+    ipcMain.on('set-active-tab', (event, index) => {
+        activeControlViewIndex = index;
+        updateControlViews();
+
+        sendNavUpdate(CONTROL_VIEW_ID);
+
+        updateControlViews();
+    });
+
+    ipcMain.on('close-tab', (event, index) => {
+        if (activeControlViewIndex >= index) {
+            activeControlViewIndex = Math.max(activeControlViewIndex - 1, 0);
+        }
+
+        const closedView = controlViews[index];
+        controlWindow.contentView.removeChildView(closedView);
+        controlViews.splice(index, 1);
+        closedView.setVisible(false);
+        closedView.webContents.setAudioMuted(true);
+        try {
+            closedView.webContents.destroy();
+        } catch (e) {
+            closedView.webContents.loadURL('about:blank');
+            closedView.webContents.navigationHistory.clear();
+        }
+        updateControlViews();
+
+        saveViewURLs()
+    });
+
+    ipcMain.on('open-tab', () => {
+        addControlView('', true);
+        updateControlViews();
+    });
+
+    ipcMain.on('toggle-mute-tab', (event, index) => {
+        const view = controlViews[index];
+        view.webContents.setAudioMuted(!view.webContents.isAudioMuted());
+        updateControlViews();
     });
 }

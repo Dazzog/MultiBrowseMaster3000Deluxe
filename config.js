@@ -28,8 +28,8 @@ export function loadViewURLs() {
     return readJsonFromFile(urlsStoragePath, []);
 }
 
-export function saveViewURLs(urlArray) {
-    writeJsonToFile(urlsStoragePath, urlArray);
+export function saveViewURLs(urls) {
+    writeJsonToFile(urlsStoragePath, urls);
 }
 
 export function loadAppConfig() {

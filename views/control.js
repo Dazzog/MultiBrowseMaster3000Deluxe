@@ -18,6 +18,7 @@ viewControlsConfigs.forEach(({index, label, icon, flip}) => {
     const iconSpan = cell.querySelector(".icon");
     const preview = cell.querySelector(".preview-img");
     const pasteBtn = cell.querySelector(".pasteBtn");
+    const copyBtn = cell.querySelector(".copyBtn");
     const backBtn = cell.querySelector(".backBtn");
     const forwardBtn = cell.querySelector(".forwardBtn");
     const input = cell.querySelector(".url");
@@ -39,6 +40,10 @@ viewControlsConfigs.forEach(({index, label, icon, flip}) => {
 
     pasteBtn.onclick = () => {
         pasteControlUrl(index);
+    }
+
+    copyBtn.onclick = () => {
+        copyControlUrl(index);
     }
 
     backBtn.id = `backBtn${index}`;
@@ -111,9 +116,8 @@ window.api?.requestStoredURLs().then((stored) => {
 
 window.api?.onURLUpdate(({index, url, canGoBack, canGoForward}) => {
     const input = document.getElementById(`url${index}`);
-    if (input) {
+    if (input && document.activeElement !== input) {
         input.value = url;
-        saveAllURLs();
     }
 
     const backBtn = document.getElementById(`backBtn${index}`);
@@ -121,6 +125,65 @@ window.api?.onURLUpdate(({index, url, canGoBack, canGoForward}) => {
 
     if (backBtn) backBtn.disabled = !canGoBack;
     if (forwardBtn) forwardBtn.disabled = !canGoForward;
+});
+
+window.api?.onControlViewsUpdate(({titles, favicons, muted, index}) => {
+    const tabBar = document.querySelector('#tabbar');
+    tabBar.innerHTML = '';
+
+    titles.forEach((title, i) => {
+        const tabBtn = document.createElement('button');
+        if (i === index) {
+            tabBtn.classList.add('active');
+        }
+
+        const muteBtn = document.createElement('span');
+        muteBtn.classList.add('muteBtn');
+        muteBtn.classList.add('material-symbols-outlined');
+        muteBtn.innerText = muted[i] ? 'volume_off' : 'volume_up';
+        muteBtn.addEventListener('click', (e) => {
+            toggleMuteTab(i);
+            e.stopPropagation();
+        });
+        tabBtn.appendChild(muteBtn);
+
+        if (favicons[i]) {
+            const icon = document.createElement('img');
+            icon.src = favicons[i];
+            icon.addEventListener('error', () => tabBtn.removeChild(icon));
+            tabBtn.appendChild(icon);
+        }
+
+        const label = document.createElement('span');
+        label.innerText = title || 'Neuer Tab';
+        tabBtn.appendChild(label);
+        tabBtn.title = tabBtn.innerText;
+
+        if (titles.length > 1) {
+            const closeBtn = document.createElement('button');
+            closeBtn.classList.add('closeBtn');
+            closeBtn.classList.add('material-symbols-outlined');
+            closeBtn.innerText = 'close';
+            closeBtn.addEventListener('click', (e) => {
+                closeTab(i);
+                e.stopPropagation();
+            });
+            tabBtn.appendChild(closeBtn);
+            tabBtn.addEventListener('auxclick', () => closeTab(i));
+        }
+
+        tabBtn.addEventListener('click', () => setActiveTab(i));
+
+        tabBar.appendChild(tabBtn);
+    })
+
+    const newTabBtn = document.createElement('button');
+    newTabBtn.classList.add('newTab');
+    newTabBtn.classList.add('material-symbols-outlined');
+    newTabBtn.innerText = 'add';
+    newTabBtn.addEventListener('click', () => openTab());
+
+    tabBar.appendChild(newTabBtn);
 });
 
 window.api?.onDisplayWindowPositionUpdate((data) => {
@@ -131,13 +194,37 @@ window.api?.onDisplayWindowPositionUpdate((data) => {
 function navigate(index) {
     const input = inputs[index];
     window.api?.navigate(index, input?.value || '');
-    saveAllURLs();
+}
+
+function setActiveTab(index) {
+    window.api?.setActiveTab(index);
+}
+
+function closeTab(index) {
+    window.api?.closeTab(index);
+}
+
+function toggleMuteTab(index) {
+    window.api?.toggleMuteTab(index);
+}
+
+function openTab() {
+    const input = inputs['control'];
+    window.api?.openTab();
+    setTimeout(() => {
+        input.value = '';
+        input.focus();
+    }, 100);
 }
 
 function pasteControlUrl(index) {
     const input = inputs['control'];
     window.api?.navigate(index, input?.value || '');
-    saveAllURLs();
+}
+
+function copyControlUrl(index) {
+    const input = inputs[index];
+    window.api?.navigate('control', input?.value || '');
 }
 
 function submitURL(event, index) {
@@ -199,12 +286,6 @@ function goForward(index) {
     window.api?.goForward(index);
 }
 
-function saveAllURLs() {
-    const viewUrls = inputs.map(input => input.value || '');
-    const controlUrl = inputs['control'].value;
-    window.api?.saveURLs(viewUrls, controlUrl);
-}
-
 async function populateDisplayList() {
     const select = document.getElementById('displaySelect');
     displays = await window.api?.getDisplays();
@@ -254,7 +335,6 @@ window.api?.onDrop(({path, id}) => {
         document.getElementById(id).value = path;
         const index = +id[3];
         window.api?.navigate(index, path);
-        saveAllURLs();
     }
 });
 
