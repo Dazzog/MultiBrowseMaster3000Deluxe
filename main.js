@@ -174,29 +174,82 @@ function loadErrorPage(wc, code, desc, url) {
     });
 }
 
-function getViewErrorHandler(view) {
+function getViewErrorHandler(wc) {
     return ((_e, errorCode, errorDesc, validatedURL, isMainFrame) => {
-        if (!isMainFrame || isErrorPage(view.webContents.getURL())) return;
-        loadErrorPage(view.webContents, errorCode, validatedURL, errorDesc);
+        if (!isMainFrame || isErrorPage(wc.getURL())) return;
+        loadErrorPage(wc, errorCode, validatedURL, errorDesc);
     });
 }
 
-function setDefaultViewSettings(view) {
-    const wc = view.webContents;
+async function getFocusedElementInfo(webContents) {
+    return webContents.executeJavaScript(`(() => {
+    function deep(doc=document){
+      let el = doc.activeElement;
+      try {
+        while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
+        if (el && el.tagName === 'IFRAME') {
+          const d = el.contentDocument || el.contentWindow?.document;
+          if (d) {
+            const inner = deep(d);
+            if (inner) el = inner;
+          }
+        }
+      } catch(_) {}
+      return el;
+    }
+    const el = deep();
+    if (!el) return null;
+    const cssPath = (() => {
+      const path = [];
+      let n = el;
+      while (n && n.nodeType === 1 && n !== document) {
+        let sel = n.tagName.toLowerCase();
+        if (n.id) { sel += '#' + CSS.escape(n.id); path.unshift(sel); break; }
+        let i = 1, p = n;
+        while ((p = p.previousElementSibling)) if (p.tagName === n.tagName) i++;
+        const siblingsSameTag = n.parentElement && Array.from(n.parentElement.children).some(c => c.tagName === n.tagName);
+        if (siblingsSameTag) sel += ':nth-of-type(' + i + ')';
+        path.unshift(sel);
+        n = n.parentElement;
+      }
+      return path.join(' > ');
+    })();
 
-    wc.on('did-fail-load', getViewErrorHandler(view));
+    return {
+      tag: el.tagName.toLowerCase(),
+      id: el.id || null,
+      className: el.className || null,
+      role: el.getAttribute?.('role') || null,
+      name: el.getAttribute?.('name') || null,
+      type: el.getAttribute?.('type') || null,
+      contentEditable: !!el.isContentEditable,
+      cssPath
+    };
+  })()`);
+}
 
-    wc.on('before-input-event', (event, input) => {
-        if (input.type !== 'keyDown') return
+function setDefaultViewSettings(wc) {
+    wc.on('did-fail-load', getViewErrorHandler(wc));
+
+    // Define Hotkeys
+    wc.on('before-input-event', async (event, input) => {
+        if (input.type !== 'keyDown') return;
 
         const isCmdOrCtrl = input.control || input.meta
         const isShift = input.shift
 
-        // F5
-        if (input.key === 'F5' || (isCmdOrCtrl && input.code === 'KeyR')) {
+        if (input.code === 'F5' || (isCmdOrCtrl && input.code === 'KeyR')) {
             isShift ? wc.reloadIgnoringCache() : wc.reload()
             event.preventDefault()
+        } else {
+            const activeElement = await getFocusedElementInfo(wc);
+            if (input.code == 'Tab' || !['input', 'textarea'].includes(activeElement?.tag?.toLowerCase())) {
+                controlWindow.webContents.send('display-window-key-down', input.code, isShift, isCmdOrCtrl);
+                event.preventDefault();
+            }
         }
+
+        return false;
     })
 }
 
@@ -363,6 +416,8 @@ app.whenReady()
             });
         });
 
+        setDefaultViewSettings(displayWindow.webContents);
+
         const storedURLs = appConfig.loadViewURLs();
 
         for (let i = 0; i < 4; i++) {
@@ -371,7 +426,7 @@ app.whenReady()
             views.push(view);
             displayWindow.contentView.addChildView(view);
 
-            setDefaultViewSettings(view);
+            setDefaultViewSettings(view.webContents);
 
             const url = (storedURLs.viewUrls || [])[i] || storedURLs[i] || 'https://picsum.photos/1920/1080';
             view.webContents.loadURL(url);
@@ -401,6 +456,7 @@ app.whenReady()
                 nodeIntegration: false
             }
         });
+        setDefaultViewSettings(tickerView.webContents);
         tickerView.webContents.loadFile(path.join(__dirname, 'views', 'ticker.html'));
         displayWindow.contentView.addChildView(tickerView);
 
@@ -467,7 +523,8 @@ app.whenReady()
             return {action: 'allow'};
         });
 
-        setDefaultViewSettings(controlView);
+        setDefaultViewSettings(controlView.webContents);
+        setDefaultViewSettings(controlWindow.webContents);
 
         controlWindow.on('resize', () => {
             const [controlWinWidth, controlWinHeight] = controlWindow.getContentSize();
@@ -560,7 +617,7 @@ app.whenReady()
     ipcMain.on('toggle-fullscreen', (event, index) => {
         const [width, height] = displayWindow.getContentSize();
 
-        if (fullscreenIndex === index) {
+        if (index === undefined || fullscreenIndex === index) {
             fullscreenIndex = null;
             layoutAllViews();
         } else {
@@ -572,6 +629,7 @@ app.whenReady()
                     views[i].setBounds({x: 0, y: 0, width: 0, height: 0});
                 }
             }
+            views[index].webContents.focus();
         }
     });
 

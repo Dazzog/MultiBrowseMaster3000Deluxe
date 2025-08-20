@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('api', {
     startDisplayCapture: (viewIndex) => ipcRenderer.invoke('start-display-capture', {viewIndex}),
     toggleForceVideo: (index) => ipcRenderer.send('toggle-force-video', index),
     onNotifyNewVersion: (callback) => ipcRenderer.on('notify-new-version', (event, data) => callback(data)),
+    onDisplayWindowKeyDown: (callback) => ipcRenderer.on('display-window-key-down', (event, key, shift, control) => callback(key, shift, control)),
 });
 
 window.addEventListener('contextmenu', (event) => {
@@ -46,3 +47,13 @@ window.addEventListener('drop', (event) => {
     const id = event.target?.id;
     ipcRenderer.send('drop', {path, id});
 });
+
+const blockTab = (event) => {
+    if (event.key == 'Tab') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+    }
+};
+
+window.addEventListener('keydown', blockTab, {capture: true});
+document.addEventListener('keydown', blockTab, {capture: true});

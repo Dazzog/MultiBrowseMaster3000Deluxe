@@ -160,13 +160,19 @@ function toggleForceVideo(index) {
 }
 
 function toggleFullscreen(index) {
-    const active = fullscreenBtns[index].classList.contains('active');
-    document.querySelectorAll('button.fullscreenBtn.active').forEach((btn) => {
-        btn.classList.remove('active');
-    });
+    if (index !== undefined) {
+        const active = fullscreenBtns[index].classList.contains('active');
+        document.querySelectorAll('button.fullscreenBtn.active').forEach((btn) => {
+            btn.classList.remove('active');
+        });
 
-    if (!active) {
-        fullscreenBtns[index].classList.add('active');
+        if (!active) {
+            fullscreenBtns[index].classList.add('active');
+        }
+    } else {
+        document.querySelectorAll('button.fullscreenBtn.active').forEach((btn) => {
+            btn.classList.remove('active');
+        });
     }
 
     window.api?.toggleFullscreen(index);
@@ -336,8 +342,6 @@ capClose.onclick = () => {
 }
 
 window.api?.onNotifyNewVersion((release) => {
-    console.log(release);
-
     const message = document.querySelector('.message');
     if (message) {
         const text = message.querySelector('.text');
@@ -376,3 +380,36 @@ function getDistance(a, b) {
         Math.abs(a.height - b.height)
     );
 }
+
+window.api?.onDisplayWindowKeyDown((keyCode, shift, control) => {
+    if (keyCode === 'Escape') {
+        toggleFullscreen();
+    } else if (keyCode === 'Tab') {
+        let activeIndex = +(document.querySelector('button.fullscreenBtn.active')?.id.replace('fullscreenBtn', ''));
+
+        let newIndex = shift ? 3 : 0;
+        if (!Number.isNaN(activeIndex)) {
+            if (shift) {
+                newIndex = activeIndex + 4 - 1;
+            } else {
+                newIndex = activeIndex + 1;
+            }
+            newIndex = newIndex % 4;
+        }
+
+        toggleFullscreen(newIndex);
+    } else if (keyCode.startsWith('Digit') || keyCode.startsWith('Numpad')) {
+        const digit = +keyCode.substring(keyCode.length - 1);
+        if (digit >= 1 && digit <= 4) {
+            const index = digit - 1;
+
+            if (shift) {
+                togglePriority(index);
+            } else if (control) {
+                toggleForceVideo(index);
+            } else {
+                toggleFullscreen(index);
+            }
+        }
+    }
+});

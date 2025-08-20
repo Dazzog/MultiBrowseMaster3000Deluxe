@@ -2,6 +2,7 @@
   "name": "MultiBrowseMaster3000Deluxe",
   "version": "1.6.1",
   "main": "main.js",
+  "type": "module",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder"
