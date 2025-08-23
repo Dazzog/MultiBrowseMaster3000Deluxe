@@ -173,7 +173,7 @@ function isErrorPage(url) {
     }
 }
 
-function loadErrorPage(wc, code, desc, url) {
+function loadErrorPage(wc, code, url, desc = '') {
     wc.loadFile(path.join(__dirname, 'views', 'error.html'), {
         query: {code: String(code), desc, url}
     });

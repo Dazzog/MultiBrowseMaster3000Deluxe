@@ -30,9 +30,31 @@
 </a>
 
 <script>
+    const errorMessages = {
+        "ERR_NAME_NOT_RESOLVED": "Die Domain konnte nicht aufgelöst werden. Bitte überprüfen Sie Ihre Internetverbindung oder die Adresse.",
+        "ERR_CONNECTION_TIMED_OUT": "Die Verbindung hat zu lange gedauert.",
+        "ERR_INTERNET_DISCONNECTED": "Es besteht keine Internetverbindung."
+    };
+
+    const httpStatusMessages = {
+        400: "Ungültige Anfrage – Der Server konnte die Anfrage nicht verstehen.",
+        401: "Nicht autorisiert – Bitte anmelden.",
+        403: "Verboten – Zugriff verweigert.",
+        404: "Nicht gefunden – Die Ressource existiert nicht.",
+        500: "Interner Serverfehler – Bitte später erneut versuchen.",
+        502: "Bad Gateway – Der Server hat eine ungültige Antwort erhalten.",
+        503: "Service nicht verfügbar – Server momentan überlastet oder in Wartung."
+    };
+
+    const errorUnknown = "Unbekannter Fehler."
+
     const params = new URLSearchParams(location.search);
-    document.getElementById('code').textContent = params.get('code') || '—';
-    document.getElementById('desc').textContent = params.get('desc') || '—';
+
+    const code = params.get("code");
+    const desc = params.get("desc");
+
+    document.getElementById('code').textContent = code || '—';
+    document.getElementById('desc').textContent = (desc ? `${errorMessages[desc] || httpStatusMessages[code] || errorUnknown} (${desc})` : null) || (code ? httpStatusMessages[code] || errorUnknown : null) || '—';
     document.getElementById('url').textContent = params.get('url') || '—';
 
     function reload() {
