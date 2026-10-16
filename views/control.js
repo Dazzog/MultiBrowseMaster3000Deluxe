@@ -335,7 +335,8 @@ function setTickerBackgroundColor(event) {
 window.api?.onDrop(({path, id}) => {
     if (id.startsWith('url')) {
         document.getElementById(id).value = path;
-        const index = +id[3];
+        const suffix = id.slice(3);
+        const index = suffix === 'control' ? 'control' : +suffix;
         window.api?.navigate(index, path);
     }
 });
