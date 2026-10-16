@@ -24,6 +24,10 @@ body {
     margin-top: 7px;
     border-bottom: 2px solid #7B52AB;
 
+    &.drag-over-end .newTab {
+        box-shadow: inset 2px 0 0 #7B52AB;
+    }
+
     button {
         flex-grow: 1;
 
@@ -45,6 +49,18 @@ body {
 
         &:hover {
             background-color: #2d2d2d;
+        }
+
+        &.dragging {
+            opacity: 0.4;
+        }
+
+        &.drag-over-before {
+            box-shadow: inset 2px 0 0 #7B52AB;
+        }
+
+        &.drag-over-after {
+            box-shadow: inset -2px 0 0 #7B52AB;
         }
 
         &.active {

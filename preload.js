@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('api', {
     openTab: () => ipcRenderer.send('open-tab'),
     toggleMuteTab: (index) => ipcRenderer.send('toggle-mute-tab', index),
     showTabContextMenu: (index) => ipcRenderer.send('show-tab-context-menu', index),
+    reorderTab: (from, to) => ipcRenderer.send('reorder-tab', {from, to}),
 });
 
 window.addEventListener('contextmenu', (event) => {
