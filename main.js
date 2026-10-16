@@ -248,7 +248,8 @@ function setDefaultViewSettings(wc) {
             event.preventDefault()
         } else {
             const activeElement = await getFocusedElementInfo(wc);
-            if (input.code == 'Tab' || !['input', 'textarea'].includes(activeElement?.tag?.toLowerCase())) {
+            const isEditable = ['input', 'textarea'].includes(activeElement?.tag?.toLowerCase()) || activeElement?.contentEditable;
+            if (!isEditable) {
                 controlWindow.webContents.send('display-window-key-down', input.code, isShift, isCmdOrCtrl);
                 event.preventDefault();
             }
