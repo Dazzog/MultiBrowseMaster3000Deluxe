@@ -290,14 +290,16 @@ async function populateDisplayList() {
     const select = document.getElementById('displaySelect');
     displays = await window.api?.getDisplays();
 
-    select.innerHTML = ''; // leeren
-    displays?.forEach(display => {
-        const {index, bounds, label} = display;
-        const option = document.createElement('option');
-        option.value = index;
-        option.text = `Bildschirm ${index + 1}${label ? ': ' + label : ''} (${bounds.width}×${bounds.height})`;
-        select.appendChild(option);
-    });
+    if (displays) {
+        select.innerHTML = ''; // leeren
+        displays?.forEach(display => {
+            const {index, bounds, label} = display;
+            const option = document.createElement('option');
+            option.value = index;
+            option.text = `Bildschirm ${index + 1}${label ? ': ' + label : ''} (${bounds.width}×${bounds.height})`;
+            select.appendChild(option);
+        });
+    }
 
     updateActiveDisplay();
 }
@@ -493,3 +495,145 @@ window.api?.onDisplayWindowKeyDown((keyCode, shift, control) => {
         }
     }
 });
+
+const openSelectWrapper = document.createElement('div');
+openSelectWrapper.id = 'openSelectWrapper';
+document.body.appendChild(openSelectWrapper);
+
+let openSelect;
+
+function highlightOption(value) {
+    openSelectWrapper.querySelectorAll('.selected').forEach((selected) => selected.classList.remove('selected'));
+    openSelectWrapper.querySelectorAll(`[data-value="${value}"]`).forEach((el) => el.classList.add('selected'));
+}
+
+function selectOption(select, value) {
+    select.value = value;
+    select.dispatchEvent(new Event('change', {bubbles: true}));
+    highlightOption(value);
+}
+
+function buildDisplayMap(select) {
+    if (!displays?.length) return null;
+
+    const minX = Math.min(...displays.map(d => d.bounds.x));
+    const minY = Math.min(...displays.map(d => d.bounds.y));
+    const maxX = Math.max(...displays.map(d => d.bounds.x + d.bounds.width));
+    const maxY = Math.max(...displays.map(d => d.bounds.y + d.bounds.height));
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.classList.add('display-map');
+    svg.setAttribute('viewBox', `0 0 ${maxX - minX} ${maxY - minY}`);
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+    displays.forEach(d => {
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.classList.add('display-map-rect');
+        rect.dataset.value = d.index;
+        rect.setAttribute('x', d.bounds.x - minX);
+        rect.setAttribute('y', d.bounds.y - minY);
+        rect.setAttribute('width', d.bounds.width);
+        rect.setAttribute('height', d.bounds.height);
+
+        if (String(d.index) === select.value) {
+            rect.classList.add('selected');
+        }
+
+        rect.addEventListener('pointerdown', () => selectOption(select, String(d.index)));
+        rect.addEventListener('mouseenter', () => highlightOption(String(d.index)));
+
+        svg.appendChild(rect);
+
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.classList.add('display-map-label');
+        label.setAttribute('x', d.bounds.x - minX + d.bounds.width / 2);
+        label.setAttribute('y', d.bounds.y - minY + d.bounds.height / 2);
+        label.setAttribute('font-size', Math.min(d.bounds.width, d.bounds.height) * 0.3);
+        label.textContent = d.index + 1;
+
+        svg.appendChild(label);
+    });
+
+    return svg;
+}
+
+function toggleSelect(select) {
+    openSelectWrapper.innerHTML = '';
+
+    if (select && openSelect !== select) {
+        openSelect = select;
+
+        const boundingRect = select.getBoundingClientRect();
+        openSelectWrapper.style.bottom = `${window.innerHeight - boundingRect.top}px`;
+        openSelectWrapper.style.left = `${boundingRect.left}px`;
+        openSelectWrapper.style.width = `${boundingRect.width}px`;
+
+        if (select.id === 'displaySelect') {
+            const displayMap = buildDisplayMap(select);
+            if (displayMap) openSelectWrapper.appendChild(displayMap);
+        }
+
+        select.querySelectorAll('option').forEach(opt => {
+            const clonedOpt = document.createElement('div');
+            clonedOpt.classList.add('option');
+            clonedOpt.innerText = opt.innerText;
+            clonedOpt.dataset.value = opt.value;
+
+            clonedOpt.addEventListener('pointerdown', () => selectOption(select, opt.value));
+
+            if (opt.value === select.value) {
+                clonedOpt.classList.add('selected');
+            }
+
+            clonedOpt.addEventListener('mouseenter', () => highlightOption(opt.value));
+
+            openSelectWrapper.appendChild(clonedOpt);
+        });
+
+        const blurListener = () => {
+            toggleSelect();
+            select.focus();
+            select.removeEventListener('blur', blurListener);
+        }
+
+        select.addEventListener('blur', blurListener);
+    } else {
+        openSelect = null;
+    }
+}
+
+const selects = document.querySelectorAll('select');
+selects.forEach(select => {
+    select.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        select.focus();
+    }, {capture: true, passive: false});
+
+    select.addEventListener('keydown', (event) => {
+        if ([' ', 'Enter'].includes(event.key)) {
+            event.preventDefault();
+            toggleSelect(select);
+        } else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+            if (openSelect === select) {
+                setTimeout(() => {
+                    openSelectWrapper.querySelectorAll('.option').forEach(opt => {
+                        if (opt.dataset.value === select.value) {
+                            opt.classList.add('selected');
+                        } else {
+                            opt.classList.remove('selected');
+                        }
+                    })
+                });
+            }
+        }
+    });
+
+    select.addEventListener('click', (event) => {
+        toggleSelect(select);
+    })
+});
+
+function onTestClick(event) {
+    event.preventDefault();
+    event.target.focus();
+}
