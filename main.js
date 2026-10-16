@@ -439,6 +439,40 @@ function resizeAllControlViews() {
     }));
 }
 
+function closeControlTab(index) {
+    if (activeControlViewIndex >= index) {
+        activeControlViewIndex = Math.max(activeControlViewIndex - 1, 0);
+    }
+
+    const closedView = controlViews[index];
+    controlWindow.contentView.removeChildView(closedView);
+    controlViews.splice(index, 1);
+    closedView.setVisible(false);
+    closedView.webContents.setAudioMuted(true);
+    try {
+        closedView.webContents.destroy();
+    } catch (e) {
+        closedView.webContents.loadURL('about:blank');
+        closedView.webContents.navigationHistory.clear();
+    }
+    updateControlViews();
+
+    saveViewURLs()
+}
+
+function toggleMuteControlTab(index) {
+    const view = controlViews[index];
+    view.webContents.setAudioMuted(!view.webContents.isAudioMuted());
+    updateControlViews();
+}
+
+function duplicateControlTab(index) {
+    const view = controlViews[index];
+    if (!view) return;
+
+    addControlView(view.webContents.getURL(), true);
+}
+
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
@@ -870,35 +904,40 @@ app.whenReady()
         updateControlViews();
     });
 
-    ipcMain.on('close-tab', (event, index) => {
-        if (activeControlViewIndex >= index) {
-            activeControlViewIndex = Math.max(activeControlViewIndex - 1, 0);
-        }
-
-        const closedView = controlViews[index];
-        controlWindow.contentView.removeChildView(closedView);
-        controlViews.splice(index, 1);
-        closedView.setVisible(false);
-        closedView.webContents.setAudioMuted(true);
-        try {
-            closedView.webContents.destroy();
-        } catch (e) {
-            closedView.webContents.loadURL('about:blank');
-            closedView.webContents.navigationHistory.clear();
-        }
-        updateControlViews();
-
-        saveViewURLs()
-    });
+    ipcMain.on('close-tab', (event, index) => closeControlTab(index));
 
     ipcMain.on('open-tab', () => {
         addControlView('', true);
         updateControlViews();
     });
 
-    ipcMain.on('toggle-mute-tab', (event, index) => {
+    ipcMain.on('toggle-mute-tab', (event, index) => toggleMuteControlTab(index));
+
+    ipcMain.on('show-tab-context-menu', (event, index) => {
         const view = controlViews[index];
-        view.webContents.setAudioMuted(!view.webContents.isAudioMuted());
-        updateControlViews();
+        if (!view) return;
+
+        const muted = view.webContents.isAudioMuted();
+
+        const template = [
+            {
+                label: muted ? 'Ton aktivieren' : 'Stummschalten',
+                click: () => toggleMuteControlTab(index)
+            },
+            {type: 'separator'},
+            {
+                label: 'Tab duplizieren',
+                click: () => duplicateControlTab(index)
+            },
+            {type: 'separator'},
+            {
+                label: 'Tab schließen',
+                enabled: controlViews.length > 1,
+                click: () => closeControlTab(index)
+            }
+        ];
+
+        const menu = Menu.buildFromTemplate(template);
+        menu.popup(BrowserWindow.fromWebContents(event.sender));
     });
 }

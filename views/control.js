@@ -169,10 +169,16 @@ window.api?.onControlViewsUpdate(({titles, favicons, muted, index}) => {
                 e.stopPropagation();
             });
             tabBtn.appendChild(closeBtn);
-            tabBtn.addEventListener('auxclick', () => closeTab(i));
+            tabBtn.addEventListener('auxclick', (e) => {
+                if (e.button === 1) closeTab(i);
+            });
         }
 
         tabBtn.addEventListener('click', () => setActiveTab(i));
+        tabBtn.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            showTabContextMenu(i);
+        });
 
         tabBar.appendChild(tabBtn);
     })
@@ -202,6 +208,10 @@ function setActiveTab(index) {
 
 function closeTab(index) {
     window.api?.closeTab(index);
+}
+
+function showTabContextMenu(index) {
+    window.api?.showTabContextMenu(index);
 }
 
 function toggleMuteTab(index) {
