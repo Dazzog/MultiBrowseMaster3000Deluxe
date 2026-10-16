@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('api', {
     closeTab: (index) => ipcRenderer.send('close-tab', index),
     openTab: () => ipcRenderer.send('open-tab'),
     toggleMuteTab: (index) => ipcRenderer.send('toggle-mute-tab', index),
+    showTabContextMenu: (index) => ipcRenderer.send('show-tab-context-menu', index),
 });
 
 window.addEventListener('contextmenu', (event) => {
