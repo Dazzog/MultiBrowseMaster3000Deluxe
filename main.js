@@ -267,7 +267,7 @@ function sendNavUpdate(index, inpage) {
         const allEntries = history.getAllEntries();
         const entriesToDelete = allEntries.filter((entry, index) => {
             return isErrorPage(entry.url) || (index > 0 && allEntries[index - 1].url === entry.url);
-        }).map(entry => allEntries.indexOf(entry)).sort().reverse();
+        }).map(entry => allEntries.indexOf(entry)).sort((a, b) => b - a);
         entriesToDelete.forEach(entry => history.removeEntryAtIndex(entry));
 
         if (view.injectedCssKey && !inpage) {
