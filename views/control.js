@@ -11,6 +11,7 @@ const marker = document.getElementById("view-insertion-point");
 
 var displays;
 var viewWindowPosition;
+var draggedTabIndex = null;
 
 viewControlsConfigs.forEach(({index, label, icon, flip}) => {
     const clone = template.content.cloneNode(true);
@@ -127,8 +128,29 @@ window.api?.onURLUpdate(({index, url, canGoBack, canGoForward}) => {
     if (forwardBtn) forwardBtn.disabled = !canGoForward;
 });
 
+const tabBar = document.getElementById('tabbar');
+
+tabBar.addEventListener('dragover', (e) => {
+    if (draggedTabIndex === null || e.target !== tabBar) return;
+    e.preventDefault();
+    tabBar.classList.add('drag-over-end');
+});
+
+tabBar.addEventListener('dragleave', (e) => {
+    if (e.target === tabBar) tabBar.classList.remove('drag-over-end');
+});
+
+tabBar.addEventListener('drop', (e) => {
+    if (draggedTabIndex === null || e.target !== tabBar) return;
+    e.preventDefault();
+    e.stopPropagation();
+    tabBar.classList.remove('drag-over-end');
+
+    const tabCount = tabBar.querySelectorAll(':scope > button:not(.newTab)').length;
+    reorderTab(draggedTabIndex, tabCount - 1);
+});
+
 window.api?.onControlViewsUpdate(({titles, favicons, muted, index}) => {
-    const tabBar = document.querySelector('#tabbar');
     tabBar.innerHTML = '';
 
     titles.forEach((title, i) => {
@@ -150,6 +172,7 @@ window.api?.onControlViewsUpdate(({titles, favicons, muted, index}) => {
         if (favicons[i]) {
             const icon = document.createElement('img');
             icon.src = favicons[i];
+            icon.draggable = false;
             icon.addEventListener('error', () => tabBtn.removeChild(icon));
             tabBtn.appendChild(icon);
         }
@@ -180,6 +203,43 @@ window.api?.onControlViewsUpdate(({titles, favicons, muted, index}) => {
             showTabContextMenu(i);
         });
 
+        tabBtn.draggable = true;
+
+        tabBtn.addEventListener('dragstart', (e) => {
+            draggedTabIndex = i;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', String(i));
+            tabBtn.classList.add('dragging');
+        });
+
+        tabBtn.addEventListener('dragend', () => {
+            draggedTabIndex = null;
+            tabBtn.classList.remove('dragging');
+        });
+
+        tabBtn.addEventListener('dragover', (e) => {
+            if (draggedTabIndex === null || draggedTabIndex === i) return;
+            e.preventDefault();
+
+            const rightHalf = isRightHalf(e, tabBtn);
+            tabBtn.classList.toggle('drag-over-after', rightHalf);
+            tabBtn.classList.toggle('drag-over-before', !rightHalf);
+        });
+
+        tabBtn.addEventListener('dragleave', () => {
+            tabBtn.classList.remove('drag-over-after', 'drag-over-before');
+        });
+
+        tabBtn.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            tabBtn.classList.remove('drag-over-after', 'drag-over-before');
+
+            if (draggedTabIndex !== null && draggedTabIndex !== i) {
+                reorderTab(draggedTabIndex, getDropTargetIndex(draggedTabIndex, i, isRightHalf(e, tabBtn)));
+            }
+        });
+
         tabBar.appendChild(tabBtn);
     })
 
@@ -204,6 +264,23 @@ function navigate(index) {
 
 function setActiveTab(index) {
     window.api?.setActiveTab(index);
+}
+
+function reorderTab(from, to) {
+    window.api?.reorderTab(from, to);
+}
+
+function isRightHalf(event, el) {
+    const rect = el.getBoundingClientRect();
+    return event.clientX - rect.left > rect.width / 2;
+}
+
+function getDropTargetIndex(from, targetIndex, rightHalf) {
+    if (rightHalf) {
+        return from < targetIndex ? targetIndex : targetIndex + 1;
+    } else {
+        return from < targetIndex ? targetIndex - 1 : targetIndex;
+    }
 }
 
 function closeTab(index) {

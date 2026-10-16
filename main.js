@@ -473,6 +473,18 @@ function duplicateControlTab(index) {
     addControlView(view.webContents.getURL(), true);
 }
 
+function reorderControlTab(from, to) {
+    if (from === to || !controlViews[from] || !controlViews[to]) return;
+
+    const activeView = controlViews[activeControlViewIndex];
+    const [movedView] = controlViews.splice(from, 1);
+    controlViews.splice(to, 0, movedView);
+    activeControlViewIndex = controlViews.indexOf(activeView);
+
+    updateControlViews();
+    saveViewURLs();
+}
+
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
@@ -912,6 +924,8 @@ app.whenReady()
     });
 
     ipcMain.on('toggle-mute-tab', (event, index) => toggleMuteControlTab(index));
+
+    ipcMain.on('reorder-tab', (event, {from, to}) => reorderControlTab(from, to));
 
     ipcMain.on('show-tab-context-menu', (event, index) => {
         const view = controlViews[index];
