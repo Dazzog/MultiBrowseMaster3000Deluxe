@@ -26,6 +26,9 @@ const CONTROL_VIEW_ID = 'control';
 const DEFAULT_VIEW_URL = 'https://picsum.photos/1920/1080';
 const DEFAULT_BLANK_URL = 'about:blank';
 
+const MIN_GRID_DIM = 1;
+const MAX_GRID_DIM = 6;
+
 const __filename = url.fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -34,15 +37,23 @@ let displayWindow;
 let views = [];
 let fullscreenIndex = null;
 let priorityIndex = null;
+let gridRows = 2;
+let gridCols = 2;
 
 let controlWindow;
 let controlViews = [];
 let activeControlViewIndex = 0;
+let controlBottomAreaHeight = 299;
 
 let tickerView = null;
 let tickerText = null;
 
 const displayCaptureSelections = new Map();
+
+function clampGridDim(n, fallback) {
+    const v = Number.isFinite(n) ? Math.round(n) : fallback;
+    return Math.min(MAX_GRID_DIM, Math.max(MIN_GRID_DIM, v));
+}
 
 function layoutAllViews() {
     const [winWidth, winHeight] = displayWindow.getContentSize();
@@ -52,26 +63,30 @@ function layoutAllViews() {
 
     if (priorityIndex !== null) {
         const unpriorizedViews = [...views.filter((view, index) => index !== priorityIndex)];
+        const remainingCount = unpriorizedViews.length;
 
-        const viewWidth = Math.floor(winWidth / 3);
-        const viewHeight = Math.floor(availableHeight / 3);
+        if (remainingCount === 0) {
+            views[priorityIndex].setBounds({x: 0, y: 0, width: winWidth, height: availableHeight});
+        } else {
+            const sideWidth = Math.floor(winWidth / 3);
+            const viewHeight = Math.floor(availableHeight / remainingCount);
 
-        for (let i = 0; i < unpriorizedViews.length; i++) {
+            for (let i = 0; i < remainingCount; i++) {
+                unpriorizedViews[i].setBounds({
+                    x: 0,
+                    y: i * viewHeight,
+                    width: sideWidth,
+                    height: viewHeight
+                });
+            }
 
-            unpriorizedViews[i].setBounds({
-                x: 0,
-                y: i * viewHeight,
-                width: viewWidth,
-                height: viewHeight
+            views[priorityIndex].setBounds({
+                x: sideWidth,
+                y: 0,
+                width: winWidth - sideWidth,
+                height: availableHeight
             });
         }
-
-        views[priorityIndex].setBounds({
-            x: viewWidth,
-            y: 0,
-            width: viewWidth * 2,
-            height: viewHeight * 3
-        });
 
         tickerView.setBounds({
             x: 0,
@@ -80,19 +95,17 @@ function layoutAllViews() {
             height: tickerHeight,
         });
     } else {
-        const cols = 2, rows = 2;
+        const cols = gridCols, rows = gridRows;
         const viewWidth = Math.floor(winWidth / cols);
         const viewHeight = Math.floor(availableHeight / rows);
 
         for (let i = 0; i < views.length; i++) {
             const col = i % cols;
             const row = Math.floor(i / cols);
-            const x = col * viewWidth;
-            const y = row * (viewHeight + tickerHeight);
 
             views[i].setBounds({
-                x,
-                y,
+                x: col * viewWidth,
+                y: row * viewHeight,
                 width: viewWidth,
                 height: viewHeight
             });
@@ -100,11 +113,75 @@ function layoutAllViews() {
 
         tickerView.setBounds({
             x: 0,
-            y: viewHeight,
+            y: availableHeight,
             width: winWidth,
             height: tickerHeight,
         });
     }
+}
+
+function createDisplayView(index, initialUrl) {
+    const view = new WebContentsView({webPreferences: {contextIsolation: true}});
+
+    displayWindow.contentView.addChildView(view);
+    setDefaultViewSettings(view.webContents);
+    view.webContents.loadURL(initialUrl);
+
+    view.webContents.on('did-navigate', () => sendNavUpdate(index));
+    view.webContents.on('did-navigate-in-page', () => sendNavUpdate(index, true));
+
+    view.webContents.setWindowOpenHandler(({url}) => {
+        const targetUrl = new URL(url);
+        const currentUrl = new URL(view.webContents.getURL());
+
+        const sameHost = targetUrl.hostname === currentUrl.hostname;
+
+        if (sameHost) {
+            view.webContents.loadURL(url);
+        } else {
+            console.warn('Blocked opening URL in new window', url);
+        }
+        return {action: 'deny'};
+    });
+
+    return view;
+}
+
+function rebuildViews(newRows, newCols) {
+    const rows = clampGridDim(newRows, gridRows);
+    const cols = clampGridDim(newCols, gridCols);
+
+    if (rows === gridRows && cols === gridCols) return;
+
+    const liveUrls = views.map(view => view.webContents.getURL());
+    const storedUrls = appConfig.loadViewURLs().viewUrls || [];
+
+    views.forEach(view => {
+        displayWindow.contentView.removeChildView(view);
+        try {
+            view.webContents.destroy();
+        } catch (e) {
+            // view is already gone, nothing to do
+        }
+    });
+
+    views = [];
+    displayCaptureSelections.clear();
+    fullscreenIndex = null;
+    priorityIndex = null;
+
+    gridRows = rows;
+    gridCols = cols;
+
+    for (let i = 0; i < rows * cols; i++) {
+        const url = liveUrls[i] || storedUrls[i] || DEFAULT_VIEW_URL;
+        views.push(createDisplayView(i, url));
+    }
+
+    layoutAllViews();
+    appConfig.saveAppConfig({...appConfig.loadAppConfig(), gridRows, gridCols});
+
+    controlWindow.webContents.send('grid-size-changed', {rows: gridRows, cols: gridCols});
 }
 
 function processInput(input) {
@@ -431,11 +508,12 @@ function getTargetView(index) {
 
 function resizeAllControlViews() {
     const [controlWinWidth, controlWinHeight] = controlWindow.getContentSize();
+    const height = Math.max(0, controlWinHeight - 86 - controlBottomAreaHeight);
     controlViews.forEach((view) => view.setBounds({
         x: 0,
         y: 86,
         width: controlWinWidth,
-        height: controlWinHeight - 385
+        height
     }));
 }
 
@@ -571,33 +649,12 @@ app.whenReady()
 
         const storedURLs = appConfig.loadViewURLs();
 
-        for (let i = 0; i < 4; i++) {
-            const view = new WebContentsView({webPreferences: {contextIsolation: true}});
+        gridRows = clampGridDim(savedConfig.gridRows, 2);
+        gridCols = clampGridDim(savedConfig.gridCols, 2);
 
-            views.push(view);
-            displayWindow.contentView.addChildView(view);
-
-            setDefaultViewSettings(view.webContents);
-
+        for (let i = 0; i < gridRows * gridCols; i++) {
             const url = (storedURLs.viewUrls || [])[i] || storedURLs[i] || DEFAULT_VIEW_URL;
-            view.webContents.loadURL(url);
-
-            view.webContents.on('did-navigate', (e) => sendNavUpdate(i));
-            view.webContents.on('did-navigate-in-page', (e) => sendNavUpdate(i, true));
-
-            view.webContents.setWindowOpenHandler(({url}) => {
-                const targetUrl = new URL(url);
-                const currentUrl = new URL(view.webContents.getURL());
-
-                const sameHost = targetUrl.hostname === currentUrl.hostname;
-
-                if (sameHost) {
-                    view.webContents.loadURL(url);
-                } else {
-                    console.warn('Blocked opening URL in new window', url);
-                }
-                return {action: 'deny'};
-            });
+            views.push(createDisplayView(i, url));
         }
 
         tickerView = new WebContentsView({
@@ -781,6 +838,17 @@ app.whenReady()
         }));
     });
 
+    ipcMain.handle('get-grid-size', () => ({
+        rows: gridRows,
+        cols: gridCols,
+        min: MIN_GRID_DIM,
+        max: MAX_GRID_DIM
+    }));
+
+    ipcMain.on('set-grid-size', (event, {rows, cols}) => {
+        rebuildViews(rows, cols);
+    });
+
     ipcMain.on('move-to-display', (event, targetIndex) => {
         const displays = screen.getAllDisplays();
 
@@ -864,6 +932,12 @@ app.whenReady()
 
     ipcMain.handle('cancel-capture-sources-select', async () => {
         controlViews[activeControlViewIndex].setVisible(true);
+    });
+
+    ipcMain.on('set-control-bottom-area-height', (event, height) => {
+        if (height === controlBottomAreaHeight) return;
+        controlBottomAreaHeight = height;
+        resizeAllControlViews();
     });
 
     ipcMain.handle('start-display-capture', async (event, {viewIndex: index}) => {

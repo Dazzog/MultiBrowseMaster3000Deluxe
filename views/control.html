@@ -13,8 +13,6 @@
 <body>
 <template id="control-template">
     <div class="cell">
-        <span class="pre-icon material-symbols-outlined icon"></span>
-
         <img alt=""
              class="preview-img"
              src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAEElEQVR42mP8z/C/HwAFAAL/AV2zNgAAAABJRU5ErkJggg=="/>
@@ -80,8 +78,8 @@
     <div aria-label="Bildschirmquelle wählen" aria-modal="true" class="cap-modal cap-hidden" id="capModal"
          role="dialog">
         <div class="cap-box">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
-                <h3 style="margin:0;font-size:16px">Quelle wählen</h3>
+            <div class="cap-header">
+                <h3>Quelle wählen</h3>
 
                 <button class="cap-btn" id="capClose">
                     <span class="material-symbols-outlined">close</span>
@@ -92,11 +90,24 @@
     </div>
 </main>
 
-<div class="grid" id="viewContainer">
-    <div id="view-insertion-point"></div>
+<div class="grid" id="viewContainer"></div>
 
+<div aria-modal="true" class="cap-modal cell-modal cap-hidden" id="cellModal" role="dialog">
+    <div class="cap-box">
+        <div class="cap-header">
+            <h3 id="cellModalTitle">View</h3>
+
+            <button class="cap-btn" id="cellModalClose">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <div id="cellModalBody"></div>
+    </div>
+</div>
+
+<div class="settings-bar">
     <div class="cell full-width">
-        <div class="wrapper">
+        <div class="wrapper displaySettings">
             <span class="pre-icon material-symbols-outlined">tv_displays</span>
             <label for="displaySelect">Monitor: </label>
             <div class="select-wrapper">
@@ -107,7 +118,18 @@
             </div>
         </div>
 
-        <div class="wrapper">
+        <div class="wrapper gridSettings">
+            <span class="pre-icon material-symbols-outlined">grid_view</span>
+            <label for="gridRows">Raster: </label>
+            <input class="grid-dim" id="gridRows" max="6" min="1" type="number"/>
+            ×
+            <input class="grid-dim" id="gridCols" max="6" min="1" type="number"/>
+            <button onclick="applyGridSize()">
+                <span class="material-symbols-outlined">subdirectory_arrow_right</span>
+            </button>
+        </div>
+
+        <div class="wrapper tickerSettings">
 			<span class="pre-icon material-symbols-outlined">
 				abc
 			  </span>

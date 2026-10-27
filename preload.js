@@ -37,6 +37,10 @@ contextBridge.exposeInMainWorld('api', {
     toggleMuteTab: (index) => ipcRenderer.send('toggle-mute-tab', index),
     showTabContextMenu: (index) => ipcRenderer.send('show-tab-context-menu', index),
     reorderTab: (from, to) => ipcRenderer.send('reorder-tab', {from, to}),
+    getGridSize: () => ipcRenderer.invoke('get-grid-size'),
+    setGridSize: (rows, cols) => ipcRenderer.send('set-grid-size', {rows, cols}),
+    onGridSizeChanged: (callback) => ipcRenderer.on('grid-size-changed', (event, data) => callback(data)),
+    setControlBottomAreaHeight: (height) => ipcRenderer.send('set-control-bottom-area-height', height),
 });
 
 window.addEventListener('contextmenu', (event) => {

@@ -1,94 +1,119 @@
-const viewControlsConfigs = [
-    {index: 0, label: "View 1 (oben links)", icon: "position_top_right", flip: true},
-    {index: 1, label: "View 2 (oben rechts)", icon: "position_top_right"},
-    {index: 2, label: "View 3 (unten links)", icon: "position_bottom_left"},
-    {index: 3, label: "View 4 (unten rechts)", icon: "position_bottom_right"}
-];
-
 const template = document.getElementById("control-template");
 const container = document.getElementById("viewContainer");
-const marker = document.getElementById("view-insertion-point");
+const settingsBar = document.querySelector(".settings-bar");
+
+const cellModal = document.getElementById('cellModal');
+const cellModalBody = document.getElementById('cellModalBody');
+const cellModalTitle = document.getElementById('cellModalTitle');
+const cellModalClose = document.getElementById('cellModalClose');
+
+let openCellSlot = null;
+
+const validationTooltip = document.createElement('div');
+validationTooltip.id = 'validationTooltip';
+validationTooltip.classList.add('hidden');
+document.body.appendChild(validationTooltip);
+
+function showValidationTooltip(input) {
+    const rect = input.getBoundingClientRect();
+    validationTooltip.textContent = input.validationMessage;
+    validationTooltip.style.left = `${rect.left}px`;
+    validationTooltip.style.bottom = `${window.innerHeight - rect.top}px`;
+    validationTooltip.classList.remove('hidden');
+    input.classList.add('invalid');
+
+    const hide = () => {
+        validationTooltip.classList.add('hidden');
+        input.classList.remove('invalid');
+    };
+    input.addEventListener('input', hide, {once: true});
+    setTimeout(hide, 4000);
+}
+
+function positionCellModal() {
+    const rect = container.getBoundingClientRect();
+    cellModal.style.top = `${rect.top}px`;
+    cellModal.style.left = `${rect.left}px`;
+    cellModal.style.width = `${rect.width}px`;
+    // Extend to the window bottom (covers the settings bar too) so the
+    // centered .cap-box always has room, even when it's taller than the grid itself.
+    cellModal.style.height = `${window.innerHeight - rect.top}px`;
+}
+
+function openCellPopup(slot, cell, index) {
+    openCellSlot = slot;
+    cellModalTitle.textContent = `View ${index + 1}`;
+    cellModalBody.appendChild(cell);
+    positionCellModal();
+    cellModal.classList.remove('cap-hidden');
+    container.classList.add('popup-open');
+    settingsBar.classList.add('popup-open');
+}
+
+function closeCellPopup() {
+    if (openCellSlot && cellModalBody.firstElementChild) {
+        openCellSlot.appendChild(cellModalBody.firstElementChild);
+    }
+    openCellSlot = null;
+    cellModal.classList.add('cap-hidden');
+    container.classList.remove('popup-open');
+    settingsBar.classList.remove('popup-open');
+}
+
+function resetCellPopup() {
+    cellModalBody.innerHTML = '';
+    openCellSlot = null;
+    cellModal.classList.add('cap-hidden');
+    container.classList.remove('popup-open');
+    settingsBar.classList.remove('popup-open');
+}
+
+cellModalClose.onclick = () => closeCellPopup();
+
+function updateCellsCollapsed() {
+    // All cells share the same grid-cell size and content, so checking one is enough.
+    const slot = container.querySelector('.cell-slot:has(.cell)');
+    const cell = slot?.querySelector('.cell');
+    if (!slot || !cell) return;
+
+    const overflowing = cell.scrollWidth > slot.clientWidth || cell.scrollHeight > slot.clientHeight;
+    container.classList.toggle('collapsed', overflowing);
+}
+
+function reportControlBottomAreaHeight() {
+    // scrollHeight reflects the grid's true content height even if flex
+    // layout/overflow has visually compressed its rendered box.
+    const height = container.scrollHeight + settingsBar.scrollHeight;
+    window.api?.setControlBottomAreaHeight(height);
+}
+
+const cellResizeObserver = new ResizeObserver(() => {
+    updateCellsCollapsed();
+    reportControlBottomAreaHeight();
+    if (openCellSlot) positionCellModal();
+});
+
+// The icon font may still be loading at first measurement (rendering
+// fallback text instead of compact glyphs), which can misreport overflow.
+// Re-check once it's ready, since a font swap alone won't retrigger the observer.
+document.fonts.ready.then(updateCellsCollapsed);
 
 var displays;
 var viewWindowPosition;
 var draggedTabIndex = null;
 
-viewControlsConfigs.forEach(({index, label, icon, flip}) => {
-    const clone = template.content.cloneNode(true);
-    const cell = clone.querySelector(".cell");
-    const iconSpan = cell.querySelector(".icon");
-    const preview = cell.querySelector(".preview-img");
-    const pasteBtn = cell.querySelector(".pasteBtn");
-    const copyBtn = cell.querySelector(".copyBtn");
-    const backBtn = cell.querySelector(".backBtn");
-    const forwardBtn = cell.querySelector(".forwardBtn");
-    const input = cell.querySelector(".url");
-    const navigateBtn = cell.querySelector(".navigateBtn");
-    const forceVideoBtn = cell.querySelector(".forceVideoBtn");
-    const fullscreenBtn = cell.querySelector(".fullscreenBtn");
-    const priorityBtn = cell.querySelector(".priorityBtn");
-    const screenShareBtn = cell.querySelector(".screenShareBtn");
+let gridRows = 2;
+let gridCols = 2;
+let viewCount = gridRows * gridCols;
 
-    // Set dynamic content
-    iconSpan.textContent = icon;
-    if (flip) iconSpan.classList.add("flip-horizontal");
+let inputs = [];
+let forceVideoBtns = [];
+let fullscreenBtns = [];
+let priorityBtns = [];
 
-    preview.id = `preview${index}`;
-
-    input.placeholder = label;
-    input.id = `url${index}`;
-    input.onkeydown = (e) => submitURL(e, index);
-
-    pasteBtn.onclick = () => {
-        pasteControlUrl(index);
-    }
-
-    copyBtn.onclick = () => {
-        copyControlUrl(index);
-    }
-
-    backBtn.id = `backBtn${index}`;
-    backBtn.onclick = () => {
-        goBack(index);
-    }
-
-    forwardBtn.id = `forwardBtn${index}`;
-    forwardBtn.onclick = () => {
-        goForward(index);
-    }
-
-    navigateBtn.onclick = () => {
-        navigate(index);
-    }
-
-    forceVideoBtn.id = `forceVideoBtn${index}`;
-    forceVideoBtn.onclick = () => toggleForceVideo(index);
-
-    fullscreenBtn.id = `fullscreenBtn${index}`;
-    fullscreenBtn.onclick = () => toggleFullscreen(index);
-
-    priorityBtn.id = `priorityBtn${index}`;
-    priorityBtn.onclick = () => togglePriority(index);
-
-    screenShareBtn.id = `screenShareBtn${index}`;
-    screenShareBtn.onclick = async () => {
-        openCapturePicker(index, async (picked) => {
-            await window.api.setDisplayCaptureSource(index, picked.id);
-            await window.api.startDisplayCapture(index);
-        });
-    };
-
-    container.insertBefore(clone, marker);
-});
-
-const inputs = [];
-[0, 1, 2, 3, 'control'].forEach(i => inputs[i] = document.getElementById(`url${i}`));
-const forceVideoBtns = [0, 1, 2, 3].map(i => document.getElementById(`forceVideoBtn${i}`));
-const fullscreenBtns = [0, 1, 2, 3].map(i => document.getElementById(`fullscreenBtn${i}`));
-const priorityBtns = [0, 1, 2, 3].map(i => document.getElementById(`priorityBtn${i}`));
 const tickerInput = document.getElementById(`tickerText`);
 
-inputs.forEach(input => {
+function wireUrlInputDnD(input) {
     let dragCounter = 0;
 
     input.addEventListener('dragenter', () => {
@@ -107,13 +132,148 @@ inputs.forEach(input => {
         dragCounter = 0;
         input.classList.remove('drag-target');
     });
-});
+}
 
-window.api?.requestStoredURLs().then((stored) => {
-    stored.viewUrls?.forEach((url, i) => {
-        if (inputs[i]) inputs[i].value = url;
+function buildViewCells(rows, cols) {
+    gridRows = rows;
+    gridCols = cols;
+    viewCount = rows * cols;
+
+    resetCellPopup();
+    cellResizeObserver.disconnect();
+
+    container.innerHTML = '';
+    container.style.setProperty('--grid-cols', cols);
+    container.style.setProperty('--grid-rows', rows);
+
+    for (let index = 0; index < viewCount; index++) {
+        const clone = template.content.cloneNode(true);
+        const cell = clone.querySelector(".cell");
+        const preview = cell.querySelector(".preview-img");
+        const pasteBtn = cell.querySelector(".pasteBtn");
+        const copyBtn = cell.querySelector(".copyBtn");
+        const backBtn = cell.querySelector(".backBtn");
+        const forwardBtn = cell.querySelector(".forwardBtn");
+        const input = cell.querySelector(".url");
+        const navigateBtn = cell.querySelector(".navigateBtn");
+        const forceVideoBtn = cell.querySelector(".forceVideoBtn");
+        const fullscreenBtn = cell.querySelector(".fullscreenBtn");
+        const priorityBtn = cell.querySelector(".priorityBtn");
+        const screenShareBtn = cell.querySelector(".screenShareBtn");
+
+        preview.id = `preview${index}`;
+
+        input.placeholder = `View ${index + 1}`;
+        input.id = `url${index}`;
+        input.onkeydown = (e) => submitURL(e, index);
+        wireUrlInputDnD(input);
+
+        pasteBtn.onclick = () => {
+            pasteControlUrl(index);
+        }
+
+        copyBtn.onclick = () => {
+            copyControlUrl(index);
+        }
+
+        backBtn.id = `backBtn${index}`;
+        backBtn.onclick = () => {
+            goBack(index);
+        }
+
+        forwardBtn.id = `forwardBtn${index}`;
+        forwardBtn.onclick = () => {
+            goForward(index);
+        }
+
+        navigateBtn.onclick = () => {
+            navigate(index);
+        }
+
+        forceVideoBtn.id = `forceVideoBtn${index}`;
+        forceVideoBtn.onclick = () => toggleForceVideo(index);
+
+        fullscreenBtn.id = `fullscreenBtn${index}`;
+        fullscreenBtn.onclick = () => toggleFullscreen(index);
+
+        priorityBtn.id = `priorityBtn${index}`;
+        priorityBtn.onclick = () => togglePriority(index);
+
+        screenShareBtn.id = `screenShareBtn${index}`;
+        screenShareBtn.onclick = async () => {
+            openCapturePicker(index, async (picked) => {
+                await window.api.setDisplayCaptureSource(index, picked.id);
+                await window.api.startDisplayCapture(index);
+            });
+        };
+
+        const slot = document.createElement('div');
+        slot.classList.add('cell-slot');
+
+        const expandBtn = document.createElement('button');
+        expandBtn.classList.add('expandBtn');
+        expandBtn.title = `View ${index + 1}`;
+        expandBtn.innerHTML = `
+            <span class="material-symbols-outlined">open_in_full</span>
+            <span class="expandUrl" id="expandUrl${index}"></span>
+        `;
+        expandBtn.onclick = () => openCellPopup(slot, cell, index);
+
+        slot.appendChild(cell);
+        slot.appendChild(expandBtn);
+        container.appendChild(slot);
+    }
+
+    cellResizeObserver.observe(container);
+    cellResizeObserver.observe(settingsBar);
+    requestAnimationFrame(() => reportControlBottomAreaHeight());
+
+    inputs = [];
+    for (let i = 0; i < viewCount; i++) inputs[i] = document.getElementById(`url${i}`);
+    inputs['control'] = document.getElementById('urlcontrol');
+
+    forceVideoBtns = Array.from({length: viewCount}, (_, i) => document.getElementById(`forceVideoBtn${i}`));
+    fullscreenBtns = Array.from({length: viewCount}, (_, i) => document.getElementById(`fullscreenBtn${i}`));
+    priorityBtns = Array.from({length: viewCount}, (_, i) => document.getElementById(`priorityBtn${i}`));
+
+    window.api?.requestStoredURLs().then((stored) => {
+        stored.viewUrls?.forEach((url, i) => {
+            if (inputs[i]) inputs[i].value = url;
+            const expandUrlEl = document.getElementById(`expandUrl${i}`);
+            if (expandUrlEl) expandUrlEl.textContent = url;
+        });
     });
+
+    const gridRowsInput = document.getElementById('gridRows');
+    const gridColsInput = document.getElementById('gridCols');
+    if (gridRowsInput) gridRowsInput.value = gridRows;
+    if (gridColsInput) gridColsInput.value = gridCols;
+}
+
+window.api?.getGridSize().then(({rows, cols, min, max}) => {
+    buildViewCells(rows, cols);
+
+    const gridRowsInput = document.getElementById('gridRows');
+    const gridColsInput = document.getElementById('gridCols');
+
+    if (gridRowsInput) { gridRowsInput.min = min; gridRowsInput.max = max; }
+    if (gridColsInput) { gridColsInput.min = min; gridColsInput.max = max; }
 });
+window.api?.onGridSizeChanged(({rows, cols}) => buildViewCells(rows, cols));
+
+function applyGridSize() {
+    const gridRowsInput = document.getElementById('gridRows');
+    const gridColsInput = document.getElementById('gridCols');
+
+    if (!gridRowsInput.checkValidity()) return showValidationTooltip(gridRowsInput);
+    if (!gridColsInput.checkValidity()) return showValidationTooltip(gridColsInput);
+
+    const rows = parseInt(gridRowsInput.value, 10);
+    const cols = parseInt(gridColsInput.value, 10);
+    if (Number.isFinite(rows) && Number.isFinite(cols)) {
+        window.api?.setGridSize(rows, cols);
+    }
+}
 
 window.api?.onURLUpdate(({index, url, canGoBack, canGoForward}) => {
     const input = document.getElementById(`url${index}`);
@@ -126,6 +286,9 @@ window.api?.onURLUpdate(({index, url, canGoBack, canGoForward}) => {
 
     if (backBtn) backBtn.disabled = !canGoBack;
     if (forwardBtn) forwardBtn.disabled = !canGoForward;
+
+    const expandUrlEl = document.getElementById(`expandUrl${index}`);
+    if (expandUrlEl) expandUrlEl.textContent = url;
 });
 
 const tabBar = document.getElementById('tabbar');
@@ -455,7 +618,7 @@ function updatePreview(index) {
 }
 
 setInterval(() => {
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < viewCount; i++) {
         updatePreview(i);
     }
     updatePreview('control');
@@ -557,20 +720,20 @@ window.api?.onDisplayWindowKeyDown((keyCode, shift, control) => {
     } else if (keyCode === 'Tab') {
         let activeIndex = +(document.querySelector('button.fullscreenBtn.active')?.id.replace('fullscreenBtn', ''));
 
-        let newIndex = shift ? 3 : 0;
+        let newIndex = shift ? viewCount - 1 : 0;
         if (!Number.isNaN(activeIndex)) {
             if (shift) {
-                newIndex = activeIndex + 4 - 1;
+                newIndex = activeIndex + viewCount - 1;
             } else {
                 newIndex = activeIndex + 1;
             }
-            newIndex = newIndex % 4;
+            newIndex = newIndex % viewCount;
         }
 
         toggleFullscreen(newIndex);
     } else if (keyCode.startsWith('Digit') || keyCode.startsWith('Numpad')) {
         const digit = +keyCode.substring(keyCode.length - 1);
-        if (digit >= 1 && digit <= 4) {
+        if (digit >= 1 && digit <= Math.min(9, viewCount)) {
             const index = digit - 1;
 
             if (shift) {
@@ -647,19 +810,23 @@ function buildDisplayMap(select) {
 
 function toggleSelect(select) {
     openSelectWrapper.innerHTML = '';
+    openSelectWrapper.classList.remove('with-map');
 
     if (select && openSelect !== select) {
         openSelect = select;
 
         const boundingRect = select.getBoundingClientRect();
+        // The native BrowserView tab content always paints above regular DOM
+        // content, so the dropdown must not grow past where it ends (viewContainer's top).
+        const safeTop = container.getBoundingClientRect().top;
+
         openSelectWrapper.style.bottom = `${window.innerHeight - boundingRect.top}px`;
         openSelectWrapper.style.left = `${boundingRect.left}px`;
-        openSelectWrapper.style.width = `${boundingRect.width}px`;
+        openSelectWrapper.style.maxHeight = `${Math.max(0, boundingRect.top - safeTop - 8)}px`;
 
-        if (select.id === 'displaySelect') {
-            const displayMap = buildDisplayMap(select);
-            if (displayMap) openSelectWrapper.appendChild(displayMap);
-        }
+        const optionsList = document.createElement('div');
+        optionsList.classList.add('options-list');
+        optionsList.style.width = `${boundingRect.width}px`;
 
         select.querySelectorAll('option').forEach(opt => {
             const clonedOpt = document.createElement('div');
@@ -675,8 +842,22 @@ function toggleSelect(select) {
 
             clonedOpt.addEventListener('mouseenter', () => highlightOption(opt.value));
 
-            openSelectWrapper.appendChild(clonedOpt);
+            optionsList.appendChild(clonedOpt);
         });
+
+        openSelectWrapper.appendChild(optionsList);
+
+        if (select.id === 'displaySelect') {
+            const displayMap = buildDisplayMap(select);
+            if (displayMap) {
+                openSelectWrapper.appendChild(displayMap);
+                openSelectWrapper.classList.add('with-map');
+            }
+        }
+
+        openSelectWrapper.style.width = openSelectWrapper.classList.contains('with-map')
+            ? 'auto'
+            : `${boundingRect.width}px`;
 
         const blurListener = () => {
             toggleSelect();
