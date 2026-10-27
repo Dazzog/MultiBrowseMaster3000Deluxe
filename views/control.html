@@ -134,7 +134,12 @@
 				abc
 			  </span>
             <label for="tickerText">Lauftext: </label>
-            <input id="tickerText" onkeydown="submitTicker(event)" placeholder="Kein Lauftext"/>
+            <div class="ticker-input-wrapper">
+                <input id="tickerText" onkeydown="submitTicker(event)" oninput="updateTickerClearBtn()" placeholder="Kein Lauftext"/>
+                <button class="clearBtn" id="tickerClearBtn" onclick="clearTicker()" title="Lauftext leeren">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
 
             <input id="tickerColor" onchange="setTickerColor(event)" type="color" value="#ffffff"/>
             <input id="tickerBackgroundColor" onchange="setTickerBackgroundColor(event)" type="color" value="#111111"/>

@@ -568,6 +568,16 @@ function setTicker() {
     window.api?.setTickerText(tickerInput?.value || '');
 }
 
+function clearTicker() {
+    if (tickerInput) tickerInput.value = '';
+    updateTickerClearBtn();
+    setTicker();
+}
+
+function updateTickerClearBtn() {
+    tickerInput?.parentElement.classList.toggle('has-text', !!tickerInput.value);
+}
+
 function submitTicker(event) {
     if (event.key === 'Enter') {
         setTicker();
@@ -594,6 +604,7 @@ window.api?.onDrop(({path, id}) => {
 window.api?.loadTicker().then(({tickerText, tickerColor, tickerBackgroundColor}) => {
     if (tickerText) {
         tickerInput.value = tickerText;
+        updateTickerClearBtn();
         window.api?.setTickerText(tickerText);
     }
 

@@ -328,6 +328,37 @@ select {
     }
 }
 
+.ticker-input-wrapper {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    margin: 0 4px;
+
+    input {
+        flex: 1;
+        margin: 0;
+        padding-right: 28px;
+    }
+
+    .clearBtn {
+        display: none;
+        position: absolute;
+        right: 2px;
+        padding: 2px;
+        margin: 0;
+        background: none;
+
+        &:hover {
+            background-color: #444;
+        }
+    }
+
+    &.has-text .clearBtn {
+        display: flex;
+    }
+}
+
 button {
     margin: 0 4px;
     padding: 4px 4px;
